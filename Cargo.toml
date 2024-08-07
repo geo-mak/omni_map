@@ -1,0 +1,17 @@
+[package]
+name = "omni_map"
+version = "0.1.0"
+edition = "2021"
+description = "A key-value map data structure that maintains the insertion order of items."
+keywords = ["ordered", "hashmap", "map", "key-value", "data-structure"]
+categories = ["data-structures", "no-std"]
+license-file = "LICENSE"
+readme = "README.md"
+
+[dev-dependencies]
+criterion = "0.5.1"
+gnuplot = "0.0.43"
+
+[[bench]]
+name = "benchmarks"
+harness = false
