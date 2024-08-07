@@ -10,7 +10,6 @@ A key-value map data structure that maintains the insertion order of items.
 - Set of very useful methods and functions inspired by both hash maps and vectors.
 
 ## Future Improvements
-- More efficient memory usage.
 - Better capacity and resizing strategy.
 - Some lazy operations.
 
