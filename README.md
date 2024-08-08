@@ -97,6 +97,22 @@ assert_eq!(map.get("key2"), Some(&2));
 assert_eq!(map.get("key3"), Some(&3));
 ```
 
+### Mutable access to items in the map
+```rust
+use omni_map::OmniMap;
+
+let mut map = OmniMap::new();
+
+map.upsert("key1".to_string(), 1);
+
+// Get a mutable reference to value by its key
+if let Some(value) = map.get_mut(&"key1".to_string()) {
+            *value = 10;
+        }
+// Value of `key1` has been mutated
+assert_eq!(map.get(&"key1".to_string()), Some(&10));
+```
+
 ### Access first and last items in the map
 ```rust
 use omni_map::OmniMap;
