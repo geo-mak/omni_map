@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 use std::ptr::{self, NonNull};
 
-/// simplified raw version of the `Vec` type in the Rust standard library.
+/// Raw vector to enable better control over memory allocation and reallocation and capacity growth.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct AllocVec<T> {
     ptr: NonNull<T>,
@@ -46,7 +46,7 @@ impl<T> AllocVec<T> {
     }
 
     /// Reserves capacity for at least `additional` more elements.
-    /// It reserves more capacity anyway, no limit is set.
+    /// The resulted capacity will be `self.capacity() + additional`.
     ///
     /// # Arguments
     ///
@@ -56,21 +56,25 @@ impl<T> AllocVec<T> {
     /// - *O*(n) where n is the new capacity.
     ///
     pub(crate) fn reserve(&mut self, additional: usize) {
-        if additional == 0 {
-            return;
+        let new_cap = self.cap.checked_add(additional).expect("capacity overflow");
+        if new_cap > self.cap {
+            self.reallocate(new_cap);
         }
-        let new_cap = self.cap.checked_add(additional).unwrap();
-        let new_layout = Layout::array::<T>(new_cap).unwrap();
+    }
+
+    /// Reallocates the vector to a new capacity.
+    fn reallocate(&mut self, new_cap: usize) {
+        let new_layout = Layout::array::<T>(new_cap).expect("layout error");
         let new_ptr = if self.cap == 0 {
             unsafe { alloc::alloc(new_layout) as *mut T }
         } else {
-            let old_layout = Layout::array::<T>(self.cap).unwrap();
+            let old_layout = Layout::array::<T>(self.cap).expect("layout error");
             unsafe {
                 alloc::realloc(self.ptr.as_ptr() as *mut u8, old_layout, new_layout.size())
                     as *mut T
             }
         };
-        self.ptr = NonNull::new(new_ptr).unwrap_or_else(|| alloc::handle_alloc_error(new_layout));
+        self.ptr = NonNull::new(new_ptr).expect("allocation error");
         self.cap = new_cap;
     }
 
