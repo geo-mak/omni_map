@@ -329,6 +329,48 @@ where
         })
     }
 
+    /// Retrieves a mutable reference to a value by its key.
+    ///
+    /// # Parameters
+    /// - `key`: The key for which to retrieve the mutable reference to the value.
+    ///
+    /// # Returns
+    /// An `Option` containing a mutable reference to the value if the key is found, or `None` if the key does not exist.
+    ///
+    /// # Time Complexity
+    /// - *O*(1) on average.
+    /// - *O*(n) in the worst case, where `n` is the number of collided keys.
+    ///
+    /// # Examples
+    /// ```
+    /// use omni_map::OmniMap;
+    ///
+    /// let mut map = OmniMap::new();
+    ///
+    /// map.upsert("key1".to_string(), "value1".to_string());
+    ///
+    /// if let Some(value) = map.get_mut(&"key1".to_string()) {
+    ///     *value = "new_value1".to_string();
+    /// }
+    ///
+    /// assert_eq!(map.get(&"key1".to_string()), Some(&"new_value1".to_string()));
+    /// assert_eq!(map.get_mut(&"nonexistent_key".to_string()), None);
+    /// ```
+    ///
+    #[inline]
+    pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+        // Compute the index for the key
+        let cmp_index = self.compute_index(key);
+
+        // Get the index vector for the computed index
+        for &i in &self.indices[cmp_index] {
+            if &self.entries[i].0 == key {
+                return Some(&mut self.entries[i].1);
+            }
+        }
+        None
+    }
+
     /// Returns the first entry in the map.
     ///
     /// # Returns
@@ -810,7 +852,7 @@ mod tests {
     }
 
     #[test]
-    fn test_map_upsert_and_get() {
+    fn test_map_get() {
         let mut map = OmniMap::new();
 
         map.upsert("key1".to_string(), 1);
@@ -822,6 +864,19 @@ mod tests {
         assert_eq!(map.get(&"key1".to_string()), Some(&1));
         assert_eq!(map.get(&"key2".to_string()), Some(&2));
         assert_eq!(map.get(&"nonexistent".to_string()), None);
+    }
+
+    #[test]
+    fn test_map_get_mut() {
+        let mut map = OmniMap::new();
+
+        map.upsert("key1".to_string(), 1);
+
+        if let Some(value) = map.get_mut(&"key1".to_string()) {
+            *value = 10;
+        }
+
+        assert_eq!(map.get(&"key1".to_string()), Some(&10));
     }
 
     #[test]
