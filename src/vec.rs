@@ -342,7 +342,7 @@ impl<T> Index<usize> for AllocVec<T> {
     ///
     /// Panics if the index is out of bounds.
     fn index(&self, index: usize) -> &Self::Output {
-        assert!(index < self.len);
+        assert!(index < self.len, "Index out of bounds");
         unsafe { &*self.ptr.as_ptr().add(index) }
     }
 }
@@ -358,7 +358,7 @@ impl<T> IndexMut<usize> for AllocVec<T> {
     ///
     /// Panics if the index is out of bounds.
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        assert!(index < self.len);
+        assert!(index < self.len, "Index out of bounds");
         unsafe { &mut *self.ptr.as_ptr().add(index) }
     }
 }
@@ -523,6 +523,15 @@ mod tests {
         let mut raw_vec: AllocVec<i32> = AllocVec::with_capacity(10);
         raw_vec.push(42);
         assert_eq!(raw_vec[0], 42);
+    }
+
+    #[test]
+    #[should_panic(expected = "Index out of bounds")]
+    fn test_raw_vec_index_out_of_bounds() {
+        let mut raw_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        raw_vec.push(42);
+
+        let _ = raw_vec[1];
     }
 
     #[test]
