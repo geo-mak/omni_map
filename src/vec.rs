@@ -116,6 +116,7 @@ impl<T> AllocVec<T> {
         }
         self.len += 1;
     }
+
     /// Returns a reference to the element at the specified index, or `None` if out of bounds.
     ///
     /// # Arguments
@@ -180,6 +181,34 @@ impl<T> AllocVec<T> {
         }
     }
 
+    /// Removes and returns the element at the specified index.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The index of the element to remove.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the index is out of bounds.
+    ///
+    /// # Time Complexity
+    ///
+    /// O(n) where n is the length of the `AllocVec`
+    pub(crate) fn remove(&mut self, index: usize) -> T {
+        assert!(index < self.len);
+        // Safety first, update len first
+        self.len -= 1;
+        unsafe {
+            let ptr = self.ptr.as_ptr().add(index);
+            // Read the value and unsafely make copy of the value on
+            // the stack and in the vector at the same time.
+            let value = ptr::read(ptr);
+            // Shift everything to fill in.
+            ptr::copy(ptr.add(1), ptr, self.len - index);
+            value
+        }
+    }
+
     /// Removes the last element and returns it, or `None` if the `AllocVec` is empty.
     ///
     /// # Time Complexity
@@ -205,39 +234,16 @@ impl<T> AllocVec<T> {
         if self.len == 0 {
             None
         } else {
-            // Read value
+            // Read the value and unsafely make copy of the value on
+            // the stack and in the vector at the same time.
             let value = unsafe { ptr::read(self.ptr.as_ptr()) };
             // Safety first, update len first
             self.len -= 1;
             unsafe {
+                // Shift everything to fill in.
                 ptr::copy(self.ptr.as_ptr().add(1), self.ptr.as_ptr(), self.len);
             }
             Some(value)
-        }
-    }
-
-    /// Removes and returns the element at the specified index.
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - The index of the element to remove.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the index is out of bounds.
-    ///
-    /// # Time Complexity
-    ///
-    /// O(n) where n is the length of the `AllocVec`
-    pub(crate) fn remove(&mut self, index: usize) -> T {
-        assert!(index < self.len);
-        // Safety first, update len first
-        self.len -= 1;
-        unsafe {
-            let ptr = self.ptr.as_ptr().add(index);
-            let value = ptr::read(ptr);
-            ptr::copy(ptr.add(1), ptr, self.len - index);
-            value
         }
     }
 
@@ -308,13 +314,15 @@ impl<T> AllocVec<T> {
 impl<T> Drop for AllocVec<T> {
     /// Drops the `AllocVec`, deallocating its memory.
     fn drop(&mut self) {
-        // Check all allocated capacity
+        // Check allocated capacity
         if self.cap != 0 {
+            // Create layout
             let layout = Layout::array::<T>(self.cap).unwrap();
             unsafe {
                 for i in 0..self.len {
                     ptr::drop_in_place(self.ptr.as_ptr().add(i));
                 }
+                // Deallocate the memory space as defined by the layout
                 alloc::dealloc(self.ptr.as_ptr() as *mut u8, layout);
             }
         }
