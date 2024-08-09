@@ -2,7 +2,7 @@
 name = "omni_map"
 version = "0.1.0"
 edition = "2021"
-description = "A key-value map data structure that maintains the insertion order of items."
+description = "A hybrid data structure that combines the best of both hash maps and vectors."
 keywords = ["ordered", "hashmap", "map", "key-value", "data-structure"]
 categories = ["data-structures", "no-std"]
 license-file = "LICENSE"
