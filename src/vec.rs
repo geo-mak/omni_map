@@ -3,7 +3,29 @@ use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 use std::ptr::{self, NonNull};
 
-/// Raw vector to enable better control over memory allocation and reallocation and capacity growth.
+/// Raw vector to enable better control over memory allocation and resizing.
+///
+/// Internal representation:
+///
+/// - `ptr` is a non-null pointer to the first element of the vector.
+/// - `len` is the number of elements in the vector.
+/// - `cap` is the number of elements the vector can hold.
+///
+/// ```text
+///            ptr  +  len   +  cap     --
+///      NonNull<T> |  usize |  usize     |
+///        +--------+--------+--------+   |
+///        | 0x0123 |      2 |      4 |   |--> Metadata
+///        +--------+--------+--------+   |
+///             |                       --
+///             v                                --
+///        +--------+--------+--------+--------+   |
+///        | val: T | val: T | uninit | uninit |   |
+///        +--------+--------+--------+--------+   |--> Heap Layout::array::<T>(cap)
+///          0x0123   0x0127   0x012B   0x012F     |
+///             0       1        2        3      --
+/// ```
+///
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct AllocVec<T> {
     ptr: NonNull<T>,

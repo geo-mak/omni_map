@@ -1,17 +1,16 @@
 ## OmniMap
 
-A key-value map data structure that maintains the insertion order of items.
+A hybrid data structure that combines the best of both hash maps and vectors.
+
+It is designed to be a fast and efficient key-value map that maintains the order of items during all operations. 
 
 ## Features
 - Relatively simple and compact implementation.
 - Maintains the order in which items are inserted.
-- Order preservation of items during all operations including: insertion, updating **and** removing.
+- Order preservation of items during all operations including: insertion, updating and **removing**.
 - Optimized for fast access.
 - Set of very useful methods and functions inspired by both hash maps and vectors.
-
-## Future Improvements
-- Better capacity and resizing strategy.
-- Some lazy operations.
+- **No** external dependencies.
 
 ## Examples
 
@@ -44,7 +43,7 @@ assert_eq!(map.len(), 0);
 assert_eq!(map.capacity(), 1000);
 ```
 
-### Create new OmniMap with default capacity
+### Creating new OmniMap with default capacity
 ```rust
 use omni_map::OmniMap;
 
@@ -57,7 +56,7 @@ assert_eq!(map.len(), 0);
 assert_eq!(map.capacity(), 16);
 ```
 
-### Insert items into the map with order preservation
+### Inserting items into the map with order preservation
 ```rust
 use omni_map::OmniMap;
 
@@ -72,7 +71,7 @@ assert_eq!(map.len(), 3);
 
 // Order of the items
 assert_eq!(
-    // Compiler will not always infer the type of the key, so you may need to specify it
+    // Compiler will not always infer the types, so you may need to specify them when calling collect()
     map.iter().collect::<Vec<(&String, &i32)>>(),
     vec![
         (&"key1".to_string(),&1),
@@ -82,7 +81,7 @@ assert_eq!(
 );
 ```
 
-### Access items in the map
+### **Immutable** access to value by key
 ```rust
 use omni_map::OmniMap;
 
@@ -97,7 +96,7 @@ assert_eq!(map.get("key2"), Some(&2));
 assert_eq!(map.get("key3"), Some(&3));
 ```
 
-### Mutable access to items in the map
+### **Mutable** access to value by key
 ```rust
 use omni_map::OmniMap;
 
@@ -105,15 +104,59 @@ let mut map = OmniMap::new();
 
 map.upsert("key1".to_string(), 1);
 
-// Get a mutable reference to value by its key
 if let Some(value) = map.get_mut(&"key1".to_string()) {
+        // Mutate the value
             *value = 10;
         }
+
 // Value of `key1` has been mutated
 assert_eq!(map.get(&"key1".to_string()), Some(&10));
 ```
 
-### Access first and last items in the map
+### **Immutable** access to value by index
+```rust
+use omni_map::OmniMap;
+
+let mut map = OmniMap::new();
+
+map.upsert("key1".to_string(), 1);
+map.upsert("key2".to_string(), 2);
+map.upsert("key3".to_string(), 3);
+
+assert_eq!(map[0], 1);
+assert_eq!(map[1], 2);
+assert_eq!(map[2], 3);
+
+// Remove the first item
+map.pop_front();
+
+// The first item now must be the second item
+// The second item now must be the third item
+assert_eq!(map[0], 2);
+assert_eq!(map[1], 3);
+```
+
+### **Mutable** access to value by index
+```rust
+use omni_map::OmniMap;
+
+let mut map = OmniMap::new();
+
+map.upsert("key1".to_string(), 1);
+map.upsert("key2".to_string(), 2);
+map.upsert("key3".to_string(), 3);
+
+// Mutate the values by index
+map[0] = 10;
+map[1] = 20;
+map[2] = 30;
+
+assert_eq!(map[0], 10);
+assert_eq!(map[1], 20);
+assert_eq!(map[2], 30);
+```
+
+### **Immutable** access to the first and last items in the map
 ```rust
 use omni_map::OmniMap;
 
@@ -130,7 +173,7 @@ assert_eq!(map.first(), Some((&"key1".to_string(), &1)));
 assert_eq!(map.last(), Some((&"key3".to_string(), &3)));
 ```
 
-### Update items in the map
+### Updating value of an existing key
 ```rust
 use omni_map::OmniMap;
 
@@ -147,22 +190,7 @@ assert_eq!(map.len(), 1);
 assert_eq!(map.get(&"key1".to_string()), Some(&2));
 ```
 
-### Access first and last items in the map
-```rust
-use omni_map::OmniMap;
-
-let mut map = OmniMap::new();
-
-map.upsert("key1".to_string(), 1);
-map.upsert("key2".to_string(), 2);
-map.upsert("key3".to_string(), 3);
-
-assert_eq!(map.first(), Some((&"key1".to_string(), &1)));
-
-assert_eq!(map.last(), Some((&"key3".to_string(), &3));
-```
-
-### Remove items and preserve order
+### Removing items and preserve order
 ```rust
 use omni_map::OmniMap;
 
@@ -192,13 +220,9 @@ assert_eq!(
         (&"key4".to_string(),&4)
     ]
 );
-
-// Order of the keys should be preserved, but index has been updated
-// Access remaining item by key
-assert_eq!(map.get(&"key3".to_string()), Some(&3));
 ```
 
-### Pop the first item in the map
+### Removing the first item in the map
 ```rust
 use omni_map::OmniMap;
 
@@ -224,7 +248,7 @@ assert_eq!(map.get(&"key1".to_string()), None);
 assert_eq!(map.first(), Some((&"key2".to_string(), &2)));
 ```
 
-### Pop the last item in the map
+### Removing the last item in the map
 ```rust
 use omni_map::OmniMap;
 
@@ -251,7 +275,7 @@ assert_eq!(map.get(&"key3".to_string()), None);
 assert_eq!(map.last(), Some((&"key2".to_string(), &2)));
 ```
 
-### Reserve extra capacity
+### Reserving extra capacity
 ```rust
 let mut map = OmniMap::new();
 

@@ -4,6 +4,7 @@ use crate::vec::AllocVec;
 use std::collections::VecDeque;
 use std::fmt;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::ops::{Index, IndexMut};
 
 const LOAD_FACTOR: f64 = 0.75; // 75% threshold for reallocation
 const DEFAULT_CAPACITY: usize = 16; // Default capacity of the map
@@ -743,6 +744,77 @@ where
     }
 }
 
+impl<K, V> Index<usize> for OmniMap<K, V>
+where
+    K: Eq + Hash + Clone,
+{
+    type Output = V;
+
+    /// Returns immutable reference to the value at the specified index.
+    ///
+    /// # Parameters
+    /// - `index`: The index of the value to retrieve.
+    ///
+    /// # Returns
+    /// A reference to the value at the specified index.
+    ///
+    /// # Panics
+    /// - if the index is out of bounds.
+    ///
+    /// # Examples
+    /// ```
+    /// use omni_map::OmniMap;
+    ///
+    /// let mut map = OmniMap::new();
+    /// map.upsert("key1".to_string(), 1);
+    /// map.upsert("key2".to_string(), 2);
+    ///
+    /// assert_eq!(map[0], 1);
+    /// assert_eq!(map[1], 2);
+    /// ```
+    ///
+    fn index(&self, index: usize) -> &Self::Output {
+        // This is safe because the index is checked in the AllocVec.
+        &self.entries[index].1
+    }
+}
+
+impl<K, V> IndexMut<usize> for OmniMap<K, V>
+where
+    K: Eq + Hash + Clone,
+{
+    /// Returns mutable reference to the value at the specified index.
+    ///
+    /// # Parameters
+    /// - `index`: The index of the value to retrieve.
+    ///
+    /// # Returns
+    /// A mutable reference to the value at the specified index.
+    ///
+    /// # Panics
+    /// - if the index is out of bounds.
+    ///
+    /// # Examples
+    /// ```
+    /// use omni_map::OmniMap;
+    ///
+    /// let mut map = OmniMap::new();
+    /// map.upsert("key1".to_string(), 1);
+    /// map.upsert("key2".to_string(), 2);
+    ///
+    /// map[0] = 10;
+    /// map[1] = 20;
+    ///
+    /// assert_eq!(map[0], 10);
+    /// assert_eq!(map[1], 20);
+    /// ```
+    ///
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        // This is safe because the index is checked in the AllocVec.
+        &mut self.entries[index].1
+    }
+}
+
 impl<'a, K, V> IntoIterator for &'a OmniMap<K, V> {
     type Item = (&'a K, &'a V);
     type IntoIter = std::iter::Map<std::slice::Iter<'a, (K, V)>, fn(&(K, V)) -> (&K, &V)>;
@@ -877,6 +949,55 @@ mod tests {
         }
 
         assert_eq!(map.get(&"key1".to_string()), Some(&10));
+    }
+
+    #[test]
+    fn test_map_index() {
+        let mut map = OmniMap::new();
+        map.upsert("key1".to_string(), 1);
+        map.upsert("key2".to_string(), 2);
+        map.upsert("key3".to_string(), 3);
+
+        assert_eq!(map[0], 1);
+        assert_eq!(map[1], 2);
+        assert_eq!(map[2], 3);
+
+        // Remove the first item
+        map.pop_front();
+
+        // The first item now must be the second item
+        // The second item now must be the third item
+        assert_eq!(map[0], 2);
+        assert_eq!(map[1], 3);
+    }
+
+    #[test]
+    fn test_map_index_mut() {
+        let mut map = OmniMap::new();
+        map.upsert("key1".to_string(), 1);
+        map.upsert("key2".to_string(), 2);
+        map.upsert("key3".to_string(), 3);
+
+        map[0] = 10;
+        map[1] = 20;
+        map[2] = 30;
+
+        assert_eq!(map[0], 10);
+        assert_eq!(map[1], 20);
+        assert_eq!(map[2], 30);
+    }
+
+    #[test]
+    #[should_panic(expected = "Index out of bounds")]
+    fn test_map_index_out_of_bounds() {
+        let mut map = OmniMap::new();
+        map.upsert("key1".to_string(), 1);
+
+        // ok
+        assert_eq!(map[0], 1);
+
+        // This must panic
+        let _ = map[1];
     }
 
     #[test]
