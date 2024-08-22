@@ -296,3 +296,43 @@ map.reserve_capacity(1000);
 
 assert_eq!(map.capacity(), 1001);
 ```
+
+### Shrinking the capacity to fit the number of items
+```rust
+let mut map = OmniMap::new();
+
+assert_eq!(map.capacity(), 0);
+
+for i in 0..10 {
+map.upsert(i, i);
+}
+
+assert_eq!(map.capacity(), 16);
+
+// Shrink the capacity to fit
+map.shrink_to_fit();
+
+assert_eq!(, 10);
+
+assert_eq!(map.capacity(), 10); // Capacity is now equal to the number of items
+```
+
+### Shrinking the capacity to a specific capacity
+```rust
+let mut map = OmniMap::new();
+
+assert_eq!(map.capacity(), 0);
+
+for i in 0..10 {
+map.upsert(i, i);
+}
+
+assert_eq!(map.capacity(), 16);
+
+// Shrink the capacity to 12
+map.shrink_to(12);
+
+assert_eq!(map.len(), 10);
+
+assert_eq!(map.capacity(), 12); // Capacity has been shrunk to 12
+```
