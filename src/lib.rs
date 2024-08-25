@@ -1425,13 +1425,14 @@ mod tests {
         }
 
         // Check that the count of 'Deleted' values in index is equal to the number of deleted entries
-        let occupied_count = map
+        let deleted_count = map
             .index
             .iter()
             .filter(|&slot| matches!(slot, Slot::Deleted))
             .count();
+
         assert_eq!(
-            occupied_count, 50,
+            deleted_count, 50,
             "Count of 'Deleted' slots in index does not match the number of deleted entries"
         );
 
@@ -1441,6 +1442,7 @@ mod tests {
             .iter()
             .filter(|&slot| matches!(slot, Slot::Occupied(_)))
             .count();
+        
         assert_eq!(
             occupied_count,
             map.len(),
