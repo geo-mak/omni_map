@@ -37,7 +37,7 @@ impl Default for Slot {
 }
 
 /// A hybrid data structure that combines the best of both hash maps and vectors.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct OmniMap<K, V> {
     entries: AllocVec<Entry<K, V>>,
     index: AllocVec<Slot>,
@@ -1033,6 +1033,19 @@ where
     }
 }
 
+impl<K, V> Clone for OmniMap<K, V>
+where
+    K: Eq + Hash + Clone,
+    V: Clone,
+{
+    fn clone(&self) -> Self {
+        OmniMap {
+            entries: self.entries.clone(),
+            index: self.index.clone(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -1414,6 +1427,31 @@ mod tests {
     }
 
     #[test]
+    fn test_omni_map_clone() {
+        let mut original: OmniMap<String, i32> = OmniMap::with_capacity(10);
+        original.upsert("key1".to_string(), 1);
+        original.upsert("key2".to_string(), 2);
+        original.upsert("key3".to_string(), 3);
+
+        let mut cloned = original.clone();
+
+        // the clone must have the same length and capacity
+        assert_eq!(cloned.len(), original.len());
+        assert_eq!(cloned.capacity(), original.capacity());
+
+        // Entries in the clone must be the same as in the original
+        for (key, value) in original.iter() {
+            assert_eq!(cloned.get(key), Some(value));
+        }
+
+        // Modifying the clone must not affect the original
+        cloned.upsert("key4".to_string(), 4);
+        assert_eq!(cloned.len(), original.len() + 1);
+        assert_eq!(original.len(), 3); // original length
+        assert_eq!(original.get(&"key4".to_string()), None); // Key in original does not exit
+    }
+
+    #[test]
     fn test_map_index_integrity() {
         let mut map: OmniMap<i32, i32> = OmniMap::new();
         for i in 0..100 {
@@ -1442,7 +1480,7 @@ mod tests {
             .iter()
             .filter(|&slot| matches!(slot, Slot::Occupied(_)))
             .count();
-        
+
         assert_eq!(
             occupied_count,
             map.len(),

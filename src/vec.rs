@@ -29,7 +29,7 @@ use std::ptr::{self, NonNull};
 ///
 /// ```
 ///
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct AllocVec<T> {
     ptr: NonNull<T>,
     ///
@@ -747,6 +747,16 @@ impl<T> DerefMut for AllocVec<T> {
     }
 }
 
+impl<T: Clone> Clone for AllocVec<T> {
+    fn clone(&self) -> Self {
+        let mut new_vec = AllocVec::with_capacity(self.cap);
+        for i in 0..self.len {
+            new_vec.push(self[i].clone());
+        }
+        new_vec
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1087,5 +1097,29 @@ mod tests {
         let vec: AllocVec<i32> = AllocVec::with_capacity(10);
         let expected_memory_usage = size_of::<usize>() * 2 + 10 * size_of::<i32>();
         assert_eq!(vec.memory_usage(), expected_memory_usage);
+    }
+
+    #[test]
+    fn test_alloc_vec_clone() {
+        let mut original: AllocVec<i32> = AllocVec::with_capacity(10);
+        original.push(1);
+        original.push(2);
+        original.push(3);
+
+        let mut cloned = original.clone();
+
+        // Cloned must have the same length and capacity
+        assert_eq!(cloned.len(), original.len());
+        assert_eq!(cloned.capacity(), original.capacity());
+
+        // The elements in the clone must be the same as in the original
+        for i in 0..original.len() {
+            assert_eq!(cloned[i], original[i]);
+        }
+
+        // Mutating the clone must not affect the original
+        cloned.push(4);
+        assert_eq!(cloned.len(), original.len() + 1);
+        assert_eq!(original.len(), 3); // original length
     }
 }
