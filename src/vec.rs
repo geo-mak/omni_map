@@ -3,11 +3,20 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Index, IndexMut, Range};
 use std::ptr::{self, NonNull};
 
-/// Raw vector to enable better control over memory allocation.
+/// Raw allocation buffer as vector to enable better control over memory allocation.
 /// It relies on explicit calls to `reserve` to grow, otherwise,
 /// it will only allocate space for one element each time `push` is called.
 ///
-/// Internal representation:
+/// # Safety
+///
+/// * AllocVec does not allow `zero-sized types` (ZSTs).
+///   Initializing with `ZSTs` will panic to avoid `undefined behavior`.
+///   Handling of ZSTs is left to the caller.
+///
+/// * The memory layout will panic in case of capacity overflow (exceeding `isize::MAX` bytes).
+///   Handling of capacity overflow to avoid panics is left to the caller.
+///
+/// # Internal representation:
 ///
 /// - `ptr` is a non-null pointer to the first element of the vector.
 /// - `len` is the number of elements in the vector.
@@ -32,20 +41,28 @@ use std::ptr::{self, NonNull};
 #[derive(Debug, PartialEq)]
 pub(crate) struct AllocVec<T> {
     ptr: NonNull<T>,
-    ///
-    /// # Safety
-    ///
-    /// `cap` must be in the `0..=usize::MAX` range.
     cap: usize,
     len: usize,
     _marker: PhantomData<T>,
 }
 
 impl<T> AllocVec<T> {
+    const IS_ZST: bool = size_of::<T>() == 0;
+
     /// Creates a new, empty `AllocVec`.
+    /// No memory is allocated until elements are pushed onto the vector.
+    ///
+    /// # Panics
+    ///
+    /// * If the type `T` is a zero-sized type.
+    ///
     #[must_use]
     #[inline]
     pub(crate) fn new() -> Self {
+        assert!(
+            !Self::IS_ZST,
+            "Zero-sized types are not allowed."
+        );
         AllocVec {
             ptr: NonNull::dangling(),
             cap: 0,
@@ -55,17 +72,28 @@ impl<T> AllocVec<T> {
     }
 
     /// Creates a new `AllocVec` with the specified capacity.
+    /// Memory is allocated for the specified capacity, and the length is set to 0.
     ///
     /// # Arguments
     ///
     /// * `cap` - The capacity of the new `AllocVec`.
+    ///
+    /// # Panics
+    ///
+    /// * If the type `T` is a zero-sized type.
+    /// * If the memory allocation fails.
+    ///
     #[must_use]
     #[inline]
     pub(crate) fn with_capacity(cap: usize) -> Self {
+        assert!(
+            !Self::IS_ZST,
+            "Zero-sized types are not allowed."
+        );
         if cap == 0 {
             return Self::new();
         }
-        let layout = Layout::array::<T>(cap).expect("Allocation error: layout error");
+        let layout = Layout::array::<T>(cap).expect("Allocation error: capacity overflow");
 
         let ptr = unsafe { alloc::alloc(layout) as *mut T };
 
@@ -99,7 +127,7 @@ impl<T> AllocVec<T> {
 
     /// Allocates or reallocates the vector to a new capacity.
     fn allocate(&mut self, new_cap: usize) {
-        let new_layout = Layout::array::<T>(new_cap).expect("Allocation error: layout error");
+        let new_layout = Layout::array::<T>(new_cap).expect("Allocation error: capacity overflow");
         let new_ptr = if self.cap == 0 {
             // Allocate new memory space
             unsafe { alloc::alloc(new_layout) as *mut T }
@@ -125,14 +153,15 @@ impl<T> AllocVec<T> {
     /// # Panics
     ///
     /// Panics if the new capacity overflows `usize`.
+    /// Panics if the memory allocation fails due to capacity overflow.
     ///
     /// # Time Complexity
     /// - *O*(n) where n is the new capacity.
     ///
     #[inline]
     pub(crate) fn reserve(&mut self, additional: usize) {
-        // Check for capacity overflow
-        let new_cap = self.cap.checked_add(additional).expect("capacity overflow");
+        // Check for arithmetic overflow
+        let new_cap = self.cap.checked_add(additional).expect("Reservation error: arithmetic overflow");
         if new_cap > self.cap {
             self.allocate(new_cap);
         }
@@ -550,9 +579,7 @@ impl<T> Drop for AllocVec<T> {
             let layout = Layout::array::<T>(self.cap).unwrap();
             unsafe {
                 // Call drop on each element to release their resources.
-                for i in 0..self.len {
-                    ptr::drop_in_place(self.ptr.as_ptr().add(i));
-                }
+                ptr::drop_in_place(std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len));
                 // Deallocate memory space
                 alloc::dealloc(self.ptr.as_ptr() as *mut u8, layout);
             }
@@ -636,14 +663,24 @@ impl<T> IndexMut<Range<usize>> for AllocVec<T> {
 
 impl<T: Default> AllocVec<T> {
     /// Creates a new `AllocVec` with the specified capacity and populates it with the default value of `T`.
+    /// Memory is allocated for the specified capacity, and the length is set to the capacity.
     ///
     /// # Arguments
     ///
     /// * `cap` - The capacity of the new `AllocVec`.
     ///
+    /// # Panics
+    ///
+    /// * If the type `T` is a zero-sized type.
+    /// * If the memory allocation fails.
+    ///
     #[must_use]
     #[inline]
     pub(crate) fn with_capacity_and_populate(cap: usize) -> Self {
+        assert!(
+            !Self::IS_ZST,
+            "Zero-sized types are not allowed."
+        );
         if cap == 0 {
             return Self::new();
         }
@@ -773,6 +810,28 @@ mod tests {
         let alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
         assert_eq!(alloc_vec.capacity(), 10);
         assert_eq!(alloc_vec.len(), 0);
+    }
+
+
+    #[test]
+    fn test_with_capacity_and_populate() {
+        let capacity = 5;
+        let alloc_vec: AllocVec<i32> = AllocVec::with_capacity_and_populate(capacity);
+
+        // Map's length and capacity must be equal to the specified capacity
+        assert_eq!(alloc_vec.len(), capacity);
+        assert_eq!(alloc_vec.capacity(), capacity);
+
+        // All elements are must have been initialized to their default values
+        for i in 0..capacity {
+            assert_eq!(alloc_vec[i], i32::default());
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "Zero-sized types are not allowed")]
+    fn test_alloc_vec_new_with_zst() {
+        let _alloc_vec: AllocVec<()> = AllocVec::new();
     }
 
     #[test]
