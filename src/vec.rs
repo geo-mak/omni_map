@@ -59,10 +59,7 @@ impl<T> AllocVec<T> {
     #[must_use]
     #[inline]
     pub(crate) fn new() -> Self {
-        assert!(
-            !Self::IS_ZST,
-            "Zero-sized types are not allowed."
-        );
+        assert!(!Self::IS_ZST, "Zero-sized types are not allowed.");
         AllocVec {
             ptr: NonNull::dangling(),
             cap: 0,
@@ -86,10 +83,7 @@ impl<T> AllocVec<T> {
     #[must_use]
     #[inline]
     pub(crate) fn with_capacity(cap: usize) -> Self {
-        assert!(
-            !Self::IS_ZST,
-            "Zero-sized types are not allowed."
-        );
+        assert!(!Self::IS_ZST, "Zero-sized types are not allowed.");
         if cap == 0 {
             return Self::new();
         }
@@ -161,7 +155,10 @@ impl<T> AllocVec<T> {
     #[inline]
     pub(crate) fn reserve(&mut self, additional: usize) {
         // Check for arithmetic overflow
-        let new_cap = self.cap.checked_add(additional).expect("Reservation error: arithmetic overflow");
+        let new_cap = self
+            .cap
+            .checked_add(additional)
+            .expect("Reservation error: arithmetic overflow");
         if new_cap > self.cap {
             self.allocate(new_cap);
         }
@@ -677,10 +674,7 @@ impl<T: Default> AllocVec<T> {
     #[must_use]
     #[inline]
     pub(crate) fn with_capacity_and_populate(cap: usize) -> Self {
-        assert!(
-            !Self::IS_ZST,
-            "Zero-sized types are not allowed."
-        );
+        assert!(!Self::IS_ZST, "Zero-sized types are not allowed.");
         if cap == 0 {
             return Self::new();
         }
@@ -811,7 +805,6 @@ mod tests {
         assert_eq!(alloc_vec.capacity(), 10);
         assert_eq!(alloc_vec.len(), 0);
     }
-
 
     #[test]
     fn test_with_capacity_and_populate() {

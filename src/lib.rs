@@ -6,10 +6,6 @@ use std::fmt::Debug;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::{Index, IndexMut};
 
-const LOAD_FACTOR: f64 = 0.75; // 75% threshold for growing
-
-const DEFAULT_CAPACITY: usize = 16; // Default capacity of the map
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entry<K, V> {
     key: K,
@@ -50,6 +46,10 @@ where
     K: Eq + Hash + Clone,
     V: Clone,
 {
+    const LOAD_FACTOR: f64 = 0.75; // 75% threshold for growing
+
+    const DEFAULT_CAPACITY: usize = 16; // Default capacity of the map
+
     /// Creates a new `OmniMap` with `0` initial capacity.
     ///
     /// # Examples
@@ -264,10 +264,11 @@ where
         }
         // Load factor = number of entries / capacity (the actual capacity of the index)
         let load_factor = self.entries.len() as f64 / self.index.capacity() as f64;
-        if load_factor > LOAD_FACTOR {
+        if load_factor > Self::LOAD_FACTOR {
             // Calculate additional capacity
             let additional: usize = {
-                let growth_factor = (self.index.capacity() as f64 / LOAD_FACTOR).ceil() as usize;
+                let growth_factor =
+                    (self.index.capacity() as f64 / Self::LOAD_FACTOR).ceil() as usize;
 
                 let growth_factor = growth_factor
                     .checked_next_power_of_two()
@@ -879,7 +880,7 @@ where
     #[must_use]
     #[inline]
     fn default() -> Self {
-        Self::with_capacity(DEFAULT_CAPACITY)
+        Self::with_capacity(Self::DEFAULT_CAPACITY)
     }
 }
 
