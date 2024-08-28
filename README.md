@@ -14,7 +14,7 @@ A hybrid data structure that combines the best of both hash maps and vectors.
 
 - Removing items from the map is a relatively expensive operation compared to regular hash maps, 
 because it requires shifting all items after the removed item in a **dense vector** and updating their indices to maintain order. Other implementations use sparse vectors with marking instead of actual removing, 
-but they have higher memory footprint and slower iteration with compacting overhead and without allowing access to value **by index**.
+but they have slower iteration with compaction overhead and without allowing access to value **by index**.
 Nevertheless, the current implementation assumes that removing is not a very frequent operation with very large number of items.
 
 - The map is currently not thread-safe, so a mutex or other synchronization mechanism are needed for usage in multithreaded environments.
