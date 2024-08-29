@@ -230,7 +230,7 @@ impl<T> AllocVec<T> {
             self.len = new_len;
         } else if new_len < self.len {
             unsafe {
-                // Drop elements in the range to their release resources
+                // Drop elements in the range to release their resources
                 ptr::drop_in_place(std::slice::from_raw_parts_mut(
                     self.ptr.as_ptr().add(new_len),
                     self.len - new_len,
