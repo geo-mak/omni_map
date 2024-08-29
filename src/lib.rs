@@ -6,7 +6,7 @@ use std::fmt::Debug;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::{Index, IndexMut};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub struct Entry<K, V> {
     key: K,
     value: V,
@@ -19,6 +19,22 @@ impl<K, V> Entry<K, V> {
     }
 }
 
+impl<K: Eq, V: PartialEq> PartialEq for Entry<K, V> {
+    fn eq(&self, other: &Self) -> bool {
+        self.key.eq(&other.key) && self.value.eq(&other.value) && self.hash.eq(&other.hash)
+    }
+}
+
+impl<K: Clone, V: Clone> Clone for Entry<K, V> {
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key.clone(),
+            value: self.value.clone(),
+            hash: self.hash, // usize is Copy
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 enum Slot {
     Empty,
@@ -26,6 +42,7 @@ enum Slot {
     Occupied(usize),
 }
 
+// Required to call AllocVec::with_capacity_and_populate()
 impl Default for Slot {
     fn default() -> Self {
         Self::Empty
@@ -33,18 +50,18 @@ impl Default for Slot {
 }
 
 /// A hybrid data structure that combines the best of both hash maps and vectors.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct OmniMap<K, V> {
-    // AllocVec does not allow zero-sized types.
+    // AllocVec does not allow zero-sized types and will panic if used.
     // Both Entry and Slot are guaranteed not to be zero-sized.
     entries: AllocVec<Entry<K, V>>,
     index: AllocVec<Slot>,
 }
 
+// Core implementation
 impl<K, V> OmniMap<K, V>
 where
-    K: Eq + Hash + Clone,
-    V: Clone,
+    K: Eq + Hash,
 {
     const LOAD_FACTOR: f64 = 0.75; // 75% threshold for growing
 
@@ -89,7 +106,7 @@ where
     /// assert_eq!(map.capacity(), 10);
     /// ```
     ///
-    #[must_use]
+    #[must_use = "Creating new instances with default capacity involves allocating memory."]
     #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
         OmniMap {
@@ -465,7 +482,7 @@ where
     /// assert_eq!(map.get(&"nonexistent_key".to_string()), None);
     /// ```
     ///
-    #[must_use]
+    #[must_use = "Unused function call that returns without side effects"]
     #[inline]
     pub fn get(&self, key: &K) -> Option<&V> {
         let hash = self.hash(key);
@@ -502,7 +519,7 @@ where
     /// assert_eq!(map.get_mut(&"nonexistent_key".to_string()), None);
     /// ```
     ///
-    #[must_use]
+    #[must_use = "Unused function call that returns without side effects"]
     #[inline]
     pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
         let hash = self.hash(key);
@@ -532,7 +549,7 @@ where
     /// assert_eq!(map.first(), Some((&"key1".to_string(), &1)));
     /// ```
     ///
-    #[must_use]
+    #[must_use = "Unused function call that returns without side effects"]
     #[inline]
     pub fn first(&self) -> Option<(&K, &V)> {
         if self.is_empty() {
@@ -563,7 +580,7 @@ where
     /// assert_eq!(map.last(), Some((&"key3".to_string(), &3)));
     /// ```
     ///
-    #[must_use]
+    #[must_use = "Unused function call that returns without side effects"]
     #[inline]
     pub fn last(&self) -> Option<(&K, &V)> {
         if self.is_empty() {
@@ -862,8 +879,7 @@ where
 
 impl<K, V> Default for OmniMap<K, V>
 where
-    K: Eq + Hash + Clone,
-    V: Clone,
+    K: Eq + Hash,
 {
     /// Creates a new `OmniMap` with the default capacity.
     /// The default capacity is set to `16`.
@@ -877,17 +893,14 @@ where
     /// assert_eq!(map.capacity(), 16);
     /// ```
     ///
-    #[must_use]
+    #[must_use = "Creating new instances with default capacity involves allocating memory."]
     #[inline]
     fn default() -> Self {
         Self::with_capacity(Self::DEFAULT_CAPACITY)
     }
 }
 
-impl<K, V> Index<usize> for OmniMap<K, V>
-where
-    K: Eq + Hash + Clone,
-{
+impl<K, V> Index<usize> for OmniMap<K, V> {
     type Output = V;
 
     /// Returns immutable reference to the value at the specified index.
@@ -919,10 +932,7 @@ where
     }
 }
 
-impl<K, V> IndexMut<usize> for OmniMap<K, V>
-where
-    K: Eq + Hash + Clone,
-{
+impl<K, V> IndexMut<usize> for OmniMap<K, V> {
     /// Returns mutable reference to the value at the specified index.
     ///
     /// # Parameters
@@ -983,11 +993,7 @@ pub struct OmniMapIntoIter<K, V> {
     index: usize,
 }
 
-impl<K, V> Iterator for OmniMapIntoIter<K, V>
-where
-    K: Eq + Hash + Clone,
-    V: Clone,
-{
+impl<K, V> Iterator for OmniMapIntoIter<K, V> {
     type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1000,11 +1006,7 @@ where
     }
 }
 
-impl<K, V> IntoIterator for OmniMap<K, V>
-where
-    K: Eq + Hash + Clone,
-    V: Clone,
-{
+impl<K, V> IntoIterator for OmniMap<K, V> {
     type Item = (K, V);
     type IntoIter = OmniMapIntoIter<K, V>;
 
@@ -1036,16 +1038,59 @@ where
     }
 }
 
-impl<K, V> Clone for OmniMap<K, V>
-where
-    K: Eq + Hash + Clone,
-    V: Clone,
-{
+impl<K: Eq, V: PartialEq> PartialEq for OmniMap<K, V> {
+    fn eq(&self, other: &Self) -> bool {
+        self.entries.eq(&other.entries) && self.index.eq(&other.index)
+    }
+}
+
+impl<K: Clone, V: Clone> Clone for OmniMap<K, V> {
     fn clone(&self) -> Self {
         OmniMap {
             entries: self.entries.clone(),
             index: self.index.clone(),
         }
+    }
+}
+
+impl<K, V> OmniMap<K, V>
+where
+    K: Eq + Hash + Clone, // Required to call self.reindex
+    V: Clone,
+{
+    /// Creates a compact clone of the `OmniMap`.
+    ///
+    /// This method creates a clone of the `OmniMap` where the capacity of the internal
+    /// storage is reduced to fit the current number of elements. This can help reduce
+    /// memory usage if the map has a lot of unused capacity.
+    ///
+    /// # Returns
+    /// A new `OmniMap` instance with the same elements as the original, but with a
+    /// capacity equal to the number of elements.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use omni_map::OmniMap;
+    ///
+    /// let mut map = OmniMap::with_capacity(5);
+    /// map.upsert("key1".to_string(), 1);
+    /// map.upsert("key2".to_string(), 2);
+    ///
+    /// let compact_clone = map.clone_compact();
+    ///
+    /// assert_eq!(compact_clone.len(), map.len());
+    /// assert_eq!(compact_clone.capacity(), map.len());
+    /// assert_eq!(compact_clone.get(&"key1".to_string()), Some(&1));
+    /// assert_eq!(compact_clone.get(&"key2".to_string()), Some(&2));
+    /// ```
+    pub fn clone_compact(&self) -> Self {
+        let mut clone = OmniMap {
+            entries: self.entries.clone_compact(),
+            index: self.index.clone_compact(), // No compaction, already fully populated.
+        };
+        clone.reindex(&self.len());
+        clone
     }
 }
 
@@ -1438,15 +1483,14 @@ mod tests {
     }
 
     #[test]
-    fn test_omni_map_clone() {
-        let mut original: OmniMap<String, i32> = OmniMap::with_capacity(10);
+    fn test_map_clone() {
+        let mut original: OmniMap<String, i32> = OmniMap::with_capacity(3);
         original.upsert("key1".to_string(), 1);
         original.upsert("key2".to_string(), 2);
-        original.upsert("key3".to_string(), 3);
 
         let mut cloned = original.clone();
 
-        // the clone must have the same length and capacity
+        // Clone must have the same length and capacity as the original
         assert_eq!(cloned.len(), original.len());
         assert_eq!(cloned.capacity(), original.capacity());
 
@@ -1456,10 +1500,36 @@ mod tests {
         }
 
         // Modifying the clone must not affect the original
-        cloned.upsert("key4".to_string(), 4);
+        cloned.upsert("key3".to_string(), 3);
         assert_eq!(cloned.len(), original.len() + 1);
-        assert_eq!(original.len(), 3); // original length
-        assert_eq!(original.get(&"key4".to_string()), None); // Key in original does not exit
+        assert_eq!(original.len(), 2); // original length
+        assert_eq!(original.get(&"key3".to_string()), None); // Key in original does not exit
+    }
+
+    #[test]
+    fn test_map_clone_compact() {
+        let mut original: OmniMap<String, i32> = OmniMap::with_capacity(3);
+        original.upsert("key1".to_string(), 1);
+        original.upsert("key2".to_string(), 2);
+
+        let mut cloned = original.clone_compact();
+
+        // Clone must have the same length as the original
+        assert_eq!(cloned.len(), original.len());
+
+        // Clone must have a capacity equal to the length of the original
+        assert_eq!(cloned.capacity(), original.len());
+
+        // Entries in the clone must be the same as in the original
+        for (key, value) in original.iter() {
+            assert_eq!(cloned.get(key), Some(value));
+        }
+
+        // Modifying the clone must not affect the original
+        cloned.upsert("key3".to_string(), 3);
+        assert_eq!(cloned.len(), original.len() + 1);
+        assert_eq!(original.len(), 2); // original length
+        assert_eq!(original.get(&"key3".to_string()), None); // Key in original does not exit
     }
 
     #[test]

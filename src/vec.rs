@@ -38,7 +38,7 @@ use std::ptr::{self, NonNull};
 ///
 /// ```
 ///
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub(crate) struct AllocVec<T> {
     ptr: NonNull<T>,
     cap: usize,
@@ -83,10 +83,10 @@ impl<T> AllocVec<T> {
     #[must_use]
     #[inline]
     pub(crate) fn with_capacity(cap: usize) -> Self {
-        assert!(!Self::IS_ZST, "Zero-sized types are not allowed.");
         if cap == 0 {
             return Self::new();
         }
+        assert!(!Self::IS_ZST, "Zero-sized types are not allowed.");
         let layout = Layout::array::<T>(cap).expect("Allocation error: capacity overflow");
 
         let ptr = unsafe { alloc::alloc(layout) as *mut T };
@@ -99,24 +99,6 @@ impl<T> AllocVec<T> {
             len: 0,
             _marker: PhantomData,
         }
-    }
-
-    /// Returns the capacity of the `AllocVec`.
-    #[inline]
-    pub(crate) fn capacity(&self) -> usize {
-        self.cap
-    }
-
-    /// Returns the length of the `AllocVec`.
-    #[inline]
-    pub(crate) fn len(&self) -> usize {
-        self.len
-    }
-
-    /// Returns `true` if the `AllocVec` is empty.
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.len == 0
     }
 
     /// Allocates or reallocates the vector to a new capacity.
@@ -135,6 +117,18 @@ impl<T> AllocVec<T> {
         };
         self.ptr = NonNull::new(new_ptr).expect("Allocation error: pointer is null");
         self.cap = new_cap;
+    }
+
+    /// Returns the capacity of the `AllocVec`.
+    #[inline]
+    pub(crate) fn capacity(&self) -> usize {
+        self.cap
+    }
+
+    /// Returns the length of the `AllocVec`.
+    #[inline]
+    pub(crate) fn len(&self) -> usize {
+        self.len
     }
 
     /// Reserves capacity for at least `additional` more elements.
@@ -720,7 +714,7 @@ impl<'a, T> IntoIterator for &'a mut AllocVec<T> {
 }
 
 /// An iterator over the elements of a `AllocVec`.
-pub struct AllocVecIntoIter<T> {
+pub(crate) struct AllocVecIntoIter<T> {
     vec: AllocVec<T>,
     index: usize,
 }
@@ -768,23 +762,85 @@ impl<T> Deref for AllocVec<T> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
-        unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
+        if self.len == 0 {
+            &[]
+        } else {
+            unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
+        }
     }
 }
 
 impl<T> DerefMut for AllocVec<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len) }
+        if self.len == 0 {
+            &mut []
+        } else {
+            unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len) }
+        }
+    }
+}
+
+impl<T: PartialEq> PartialEq for AllocVec<T> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.len != other.len {
+            return false;
+        }
+        self.iter().zip(other.iter()).all(|(a, b)| a.eq(b))
+    }
+}
+
+impl<T: Clone> AllocVec<T> {
+    /// Clones the `AllocVec` with two possible modes: `compact` or `full`.
+    fn clone_in(&self, compact: bool) -> Self {
+        // New dangling vector
+        // Checking for ZSTs is already done when creating a new AllocVec
+        let mut new_vec = AllocVec {
+            ptr: NonNull::dangling(),
+            cap: 0,
+            len: 0,
+            _marker: PhantomData,
+        };
+
+        if self.cap == 0 || (compact && self.len == 0) {
+            // No allocation required either way
+            return new_vec;
+        }
+
+        // cap here must be greater than 0 either way (self.cap or self.len)
+        let cap = if compact { self.len } else { self.cap };
+
+        // Allocate memory space
+        let layout = Layout::array::<T>(cap).expect("Cloning error: layout allocation error");
+        let ptr = unsafe { alloc::alloc(layout) as *mut T };
+
+        // Set the new pointer and capacity
+        new_vec.ptr = NonNull::new(ptr).expect("Cloning error: pointer is null");
+        new_vec.cap = cap;
+
+        // Clone elements
+        unsafe {
+            let src_slice = std::slice::from_raw_parts(self.ptr.as_ptr(), self.len);
+            let dest_slice = std::slice::from_raw_parts_mut(new_vec.ptr.as_ptr(), self.len);
+            dest_slice.clone_from_slice(src_slice);
+        }
+
+        // Set the new length
+        new_vec.len = self.len;
+
+        // Clone is complete
+        new_vec
+    }
+
+    /// Clones the `AllocVec` with capacity equal to the length.
+    #[must_use]
+    pub(crate) fn clone_compact(&self) -> Self {
+        self.clone_in(true)
     }
 }
 
 impl<T: Clone> Clone for AllocVec<T> {
     fn clone(&self) -> Self {
-        let mut new_vec = AllocVec::with_capacity(self.cap);
-        for i in 0..self.len {
-            new_vec.push(self[i].clone());
-        }
-        new_vec
+        self.clone_in(false)
     }
 }
 
@@ -1152,12 +1208,26 @@ mod tests {
     }
 
     #[test]
+    fn test_alloc_vec_clone_empty() {
+        let original: AllocVec<i32> = AllocVec::new();
+        let cloned = original.clone();
+
+        // Cloned must have the same length and capacity
+        assert_eq!(cloned.len(), 0);
+        assert_eq!(cloned.capacity(), 0);
+
+        // They must be equal (ptr is dangling in both)
+        assert_eq!(cloned, original);
+    }
+
+    #[test]
     fn test_alloc_vec_clone() {
         let mut original: AllocVec<i32> = AllocVec::with_capacity(10);
         original.push(1);
         original.push(2);
         original.push(3);
 
+        // Clone with the same capacity
         let mut cloned = original.clone();
 
         // Cloned must have the same length and capacity
@@ -1173,5 +1243,65 @@ mod tests {
         cloned.push(4);
         assert_eq!(cloned.len(), original.len() + 1);
         assert_eq!(original.len(), 3); // original length
+    }
+
+    #[test]
+    fn test_alloc_vec_clone_compact() {
+        let mut original: AllocVec<i32> = AllocVec::with_capacity(10);
+        original.push(1);
+        original.push(2);
+        original.push(3);
+
+        // Clone without retaining the capacity
+        let cloned = original.clone_compact();
+
+        // Cloned must have the same length as the original
+        assert_eq!(cloned.len(), original.len());
+
+        // Cloned must have a capacity equal to the length of the original
+        assert_eq!(cloned.capacity(), original.len());
+
+        // The elements in the clone must be the same as in the original
+        for i in 0..original.len() {
+            assert_eq!(cloned[i], original[i]);
+        }
+
+        // Mutating the clone must not affect the original
+        let mut cloned = cloned; // make mutable
+        cloned.push(4);
+        assert_eq!(cloned.len(), original.len() + 1);
+        assert_eq!(original.len(), 3); // original length
+    }
+
+    #[test]
+    fn test_alloc_vec_equality() {
+        let mut vec1: AllocVec<i32> = AllocVec::with_capacity(3);
+        vec1.push(1);
+        vec1.push(2);
+        vec1.push(3);
+
+        let mut vec2: AllocVec<i32> = AllocVec::with_capacity(3);
+        vec2.push(1);
+        vec2.push(2);
+        vec2.push(3);
+
+        // Vectors with the same elements must be equal
+        assert_eq!(vec1, vec2);
+
+        let mut vec3: AllocVec<i32> = AllocVec::with_capacity(3);
+        vec3.push(4);
+        vec3.push(5);
+        vec3.push(6);
+
+        // Vectors with different elements must not be equal
+        assert_ne!(vec1, vec3);
+
+        let mut vec4: AllocVec<i32> = AllocVec::with_capacity(4);
+        vec4.push(1);
+        vec4.push(2);
+        vec4.push(3);
+
+        // Vectors with the same elements but different capacities must be equal
+        assert_eq!(vec1, vec4);
     }
 }
