@@ -1,6 +1,6 @@
 ## OmniMap
 
-A hybrid data structure that combines the best of both hash maps and vectors.
+A key-value data structure that combines the best of both hash maps and vectors.
 
 ## Features
 - Relatively simple and compact implementation.
