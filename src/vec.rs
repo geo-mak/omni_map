@@ -47,8 +47,6 @@ pub(crate) struct AllocVec<T> {
 }
 
 impl<T> AllocVec<T> {
-    const IS_ZST: bool = size_of::<T>() == 0;
-
     /// Creates a new, empty `AllocVec`.
     /// No memory is allocated until elements are pushed onto the vector.
     ///
@@ -59,7 +57,7 @@ impl<T> AllocVec<T> {
     #[must_use]
     #[inline]
     pub(crate) fn new() -> Self {
-        assert!(!Self::IS_ZST, "Zero-sized types are not allowed.");
+        assert_ne!(size_of::<T>(), 0, "Zero-sized types are not allowed");
         AllocVec {
             ptr: NonNull::dangling(),
             cap: 0,
@@ -86,7 +84,7 @@ impl<T> AllocVec<T> {
         if cap == 0 {
             return Self::new();
         }
-        assert!(!Self::IS_ZST, "Zero-sized types are not allowed.");
+        assert_ne!(size_of::<T>(), 0, "Zero-sized types are not allowed");
         let layout = Layout::array::<T>(cap).expect("Allocation error: capacity overflow");
 
         let ptr = unsafe { alloc::alloc(layout) as *mut T };
@@ -668,7 +666,7 @@ impl<T: Default> AllocVec<T> {
     #[must_use]
     #[inline]
     pub(crate) fn with_capacity_and_populate(cap: usize) -> Self {
-        assert!(!Self::IS_ZST, "Zero-sized types are not allowed.");
+        assert_ne!(size_of::<T>(), 0, "Zero-sized types are not allowed");
         if cap == 0 {
             return Self::new();
         }
@@ -879,10 +877,22 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "Zero-sized types are not allowed")]
-    fn test_alloc_vec_new_with_zst() {
+    fn test_alloc_vec_new_zst() {
         let _alloc_vec: AllocVec<()> = AllocVec::new();
     }
 
+    #[test]
+    #[should_panic(expected = "Zero-sized types are not allowed")]
+    fn test_alloc_vec_new_with_capacity_zst() {
+        let _alloc_vec: AllocVec<()> = AllocVec::with_capacity(1);
+    }
+
+    #[test]
+    #[should_panic(expected = "Zero-sized types are not allowed")]
+    fn test_alloc_vec_new_with_capacity_populate_zst() {
+        let _alloc_vec: AllocVec<()> = AllocVec::with_capacity_and_populate(1);
+    }
+    
     #[test]
     fn test_alloc_vec_reserve() {
         let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
