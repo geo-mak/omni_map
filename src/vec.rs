@@ -2,6 +2,7 @@ use std::alloc::{self, Layout};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Index, IndexMut, Range};
 use std::ptr::{self, NonNull};
+use std::fmt::Debug;
 
 /// Raw allocation buffer as vector to enable better control over memory allocation.
 /// It relies on explicit calls to `reserve` to grow, otherwise,
@@ -37,8 +38,6 @@ use std::ptr::{self, NonNull};
 ///             0       1        2        3      --
 ///
 /// ```
-///
-#[derive(Debug)]
 pub(crate) struct AllocVec<T> {
     ptr: NonNull<T>,
     cap: usize,
@@ -842,6 +841,12 @@ impl<T: Clone> Clone for AllocVec<T> {
     }
 }
 
+impl<T: Debug> Debug for AllocVec<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1313,5 +1318,18 @@ mod tests {
 
         // Vectors with the same elements but different capacities must be equal
         assert_eq!(vec1, vec4);
+    }
+
+    #[test]
+    fn test_alloc_vec_debug() {
+        let mut vec: AllocVec<i32> = AllocVec::new();
+        vec.push(1);
+        vec.push(2);
+        vec.push(3);
+
+        let debug_output = format!("{:?}", vec);
+        let expected_output = "[1, 2, 3]";
+
+        assert_eq!(debug_output, expected_output);
     }
 }

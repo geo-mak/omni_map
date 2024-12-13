@@ -1,10 +1,11 @@
 mod vec;
 
-use crate::vec::AllocVec;
 use std::fmt;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::{Index, IndexMut};
+
+use crate::vec::AllocVec;
 
 #[derive(Debug)]
 pub struct Entry<K, V> {
@@ -25,7 +26,11 @@ impl<K: Eq, V: PartialEq> PartialEq for Entry<K, V> {
     }
 }
 
-impl<K: Clone, V: Clone> Clone for Entry<K, V> {
+impl<K, V> Clone for Entry<K, V>
+where
+    K: Clone,
+    V: Clone,
+{
     fn clone(&self) -> Self {
         Self {
             key: self.key.clone(),
@@ -50,7 +55,6 @@ impl Default for Slot {
 }
 
 /// A hybrid data structure that combines the best of both hash maps and vectors.
-#[derive(Debug)]
 pub struct OmniMap<K, V> {
     // AllocVec does not allow zero-sized types and will panic if used.
     // Both Entry and Slot are guaranteed not to be zero-sized.
@@ -64,8 +68,6 @@ where
     K: Eq + Hash,
 {
     const LOAD_FACTOR: f64 = 0.75; // 75% threshold for growing
-
-    const DEFAULT_CAPACITY: usize = 16; // Default capacity of the map
 
     /// Creates a new `OmniMap` with `0` initial capacity.
     ///
@@ -858,25 +860,6 @@ where
     }
 }
 
-impl<K, V> fmt::Display for OmniMap<K, V>
-where
-    K: Debug,
-    V: Debug,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{")?;
-        let mut first = true;
-        for entry in &self.entries {
-            if !first {
-                write!(f, ", ")?;
-            }
-            write!(f, "{:?}: {:?}", entry.key, entry.value)?;
-            first = false;
-        }
-        write!(f, "}}")
-    }
-}
-
 impl<K, V> Default for OmniMap<K, V>
 where
     K: Eq + Hash,
@@ -896,7 +879,7 @@ where
     #[must_use = "Creating new instances with default capacity involves allocating memory."]
     #[inline]
     fn default() -> Self {
-        Self::with_capacity(Self::DEFAULT_CAPACITY)
+        Self::with_capacity(16)
     }
 }
 
@@ -1038,13 +1021,21 @@ impl<K, V> IntoIterator for OmniMap<K, V> {
     }
 }
 
-impl<K: Eq, V: PartialEq> PartialEq for OmniMap<K, V> {
+impl<K, V> PartialEq for OmniMap<K, V>
+where
+    K: Eq,
+    V: PartialEq
+{
     fn eq(&self, other: &Self) -> bool {
         self.entries.eq(&other.entries) && self.index.eq(&other.index)
     }
 }
 
-impl<K: Clone, V: Clone> Clone for OmniMap<K, V> {
+impl<K, V> Clone for OmniMap<K, V>
+where
+    K: Clone,
+    V: Clone
+{
     fn clone(&self) -> Self {
         OmniMap {
             entries: self.entries.clone(),
@@ -1094,10 +1085,33 @@ where
     }
 }
 
+impl<K, V> Debug for OmniMap<K, V>
+where
+    K: Eq + Hash + Debug,
+    V: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_map().entries(self.iter()).finish()
+    }
+}
+
+impl<K, V> Display for OmniMap<K, V>
+where
+    K: Display,
+    V: Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "{{")?;
+        for entry in &self.entries {
+            writeln!(f, "    {}: {}", entry.key, entry.value)?;
+        }
+        write!(f, "}}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
-
-    use crate::{OmniMap, Slot};
+    use super::*;
 
     #[test]
     fn test_create_map() {
@@ -1321,8 +1335,6 @@ mod tests {
 
         assert_eq!(map.get(&1), None);
         assert_eq!(map.get(&2), Some(&2));
-        println!("Entries {:?}", map.entries.iter().collect::<Vec<_>>());
-        println!("index {:?}", map.index.iter().collect::<Vec<_>>())
     }
 
     #[test]
@@ -1575,5 +1587,18 @@ mod tests {
                 assert!(indices.insert(index), "Duplicate index found: {}", index);
             }
         }
+    }
+
+    #[test]
+    fn test_omni_map_debug() {
+        let mut map: OmniMap<String, i32> = OmniMap::with_capacity(3);
+        map.upsert("key1".to_string(), 1);
+        map.upsert("key2".to_string(), 2);
+        map.upsert("key3".to_string(), 3);
+
+        let debug_str = format!("{:?}", map);
+        let expected_str = r#"{"key1": 1, "key2": 2, "key3": 3}"#;
+
+        assert_eq!(debug_str, expected_str);
     }
 }
