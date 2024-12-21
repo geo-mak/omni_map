@@ -275,15 +275,11 @@ where
         debug_assert_eq!(self.entries.capacity(), self.index.capacity());
     }
 
-    /// Resizes or shrinks the map if necessary with reindexing.
+    /// Resizes map with reindexing if the current load exceeds the load factor.
     fn maybe_grow(&mut self) {
-        if self.index.capacity() == 0 {
-            // Allocate initial capacity without reindexing
-            self.grow(1, false);
-        }
         // Load factor = number of entries / capacity (the actual capacity of the index)
-        let load_factor = self.entries.len() as f64 / self.index.capacity() as f64;
-        if load_factor > Self::LOAD_FACTOR {
+        let current_load = self.entries.len() as f64 / self.index.capacity() as f64;
+        if current_load > Self::LOAD_FACTOR {
             // Calculate additional capacity
             let additional: usize = {
                 let growth_factor =
@@ -434,8 +430,14 @@ where
     /// ```
     ///
     pub fn upsert(&mut self, key: K, value: V) {
-        // Resize if necessary
-        self.maybe_grow();
+        if self.index.capacity() == 0 {
+            // Allocate initial capacity without reindexing
+            self.grow(1, false);
+        } else {
+            // Resize if necessary
+            self.maybe_grow();
+        }
+
         // Hash the key
         let hash = self.hash(&key);
         let capacity = self.index.capacity();
