@@ -39,8 +39,8 @@ assert_eq!(map.capacity(), 0);
 ```rust
 use omni_map::OmniMap;
 
-// Creating a map with a capacity is much more efficient.
-// The map will reallocate when the load factor is exceeded.
+// Creating a map with a capacity is much more efficient when the number of items is known in advance.
+// The map will allocate with the specified capacity and will grow as needed.
 let map: OmniMap<i32, &str> = OmniMap::with_capacity(100);
 
 assert!(map.is_empty());
@@ -54,7 +54,8 @@ assert_eq!(map.capacity(), 100);
 ```rust
 use omni_map::OmniMap;
 
-let map: OmniMap<String, i32> = OmniMap::default();
+// By default, the map will allocate with a capacity of 16.
+let map: OmniMap<i32, &str> = OmniMap::default();
 
 assert!(map.is_empty());
 
@@ -73,10 +74,13 @@ map.insert(1, "a");
 map.insert(2, "b");
 map.insert(3, "c");
 
+// The map now is not empty.
 assert!(!map.is_empty());
+
+// Length is now 3.
 assert_eq!(map.len(), 3);
 
-// Order of the items
+// Order of the items.
 assert_eq!(
     map.iter().collect::<Vec<(&i32, &&str)>>(),
     vec![
@@ -98,13 +102,9 @@ map.insert(1, "a");
 // When updating an existing key, the old value is returned.
 let old_value = map.insert(1, "b");
 
-// Length must be 1.
-assert_eq!(map.len(), 1);
-
-// Old value must be "a".
 assert_eq!(old_value, Some("a"));
 
-// New value must be "b".
+// Value of key `1` has been updated to "b".
 assert_eq!(map.get(&1), Some(&"b"));
 ```
 
@@ -115,12 +115,9 @@ use omni_map::OmniMap;
 let mut map = OmniMap::new();
 
 map.insert(1, "a");
-map.insert(2, "b");
-map.insert(3, "c");
 
+// Access value by key immutably.
 assert_eq!(map.get(&1), Some(&"a"));
-assert_eq!(map.get(&2), Some(&"b"));
-assert_eq!(map.get(&3), Some(&"c"));
 ```
 
 ### **Mutable** access to value by key
@@ -131,16 +128,17 @@ let mut map = OmniMap::new();
 
 map.insert(1, "a");
 
+// Access value by key mutably.
 if let Some(value) = map.get_mut(&1) {
-// Mutate the value
+// Value can be changed.
 *value = "b";
 }
 
-// Value of `1` has been mutated
+// Value of key `1` has been changed to "b".
 assert_eq!(map.get(&1), Some(&"b"));
 ```
 
-### **Immutable** access to value by index
+### Access value by index
 ```rust
 use omni_map::OmniMap;
 
@@ -150,30 +148,12 @@ map.insert(1, "a");
 map.insert(2, "b");
 map.insert(3, "c");
 
+// Read values by index.
 assert_eq!(map[0], "a");
 assert_eq!(map[1], "b");
 assert_eq!(map[2], "c");
 
-// Remove the first item
-map.pop_front();
-
-// The first item now must be the second item
-// The second item now must be the third item
-assert_eq!(map[0], "b");
-assert_eq!(map[1], "c");
-```
-
-### **Mutable** access to value by index
-```rust
-use omni_map::OmniMap;
-
-let mut map = OmniMap::new();
-
-map.insert(1, "a");
-map.insert(2, "b");
-map.insert(3, "c");
-
-// Mutate the values by index
+// Mutate the values by index.
 map[0] = "x";
 map[1] = "y";
 map[2] = "z";
@@ -193,10 +173,10 @@ map.insert(1, "a");
 map.insert(2, "b");
 map.insert(3, "c");
 
-// First key is 1 with value "a"
+// First item is (1, "a").
 assert_eq!(map.first(), Some((&1, &"a")));
 
-// Last key is 3 with value "c"
+// Last item is (3, "c").
 assert_eq!(map.last(), Some((&3, &"c")));
 ```
 
@@ -206,7 +186,7 @@ use omni_map::OmniMap;
 
 let mut map = OmniMap::new();
 
-// Insert 4 items
+// Insert 4 items.
 map.insert(1, "a");
 map.insert(2, "b");
 map.insert(3, "c");
@@ -214,14 +194,19 @@ map.insert(4, "d");
 
 assert_eq!(map.len(), 4);
 
-// Remove the second item (2)
-// Must return true
-assert!(map.remove(&2));
+// Remove the second item.
+let removed_value = map.remove(&2);
 
-// Length is now 3
+// Removed value is "b".
+assert_eq!(removed_value, Some("b"));
+
+// Length is now 3.
 assert_eq!(map.len(), 3);
 
-// Check the order of the remaining items
+// Key is no longer in the map.
+assert_eq!(map.get(&2), None);
+
+// The order of the remaining items is preserved.
 assert_eq!(
     map.iter().collect::<Vec<(&i32, &&str)>>(),
     vec![
@@ -244,17 +229,19 @@ map.insert(3, "c");
 
 assert_eq!(map.len(), 3);
 
-// Pop the first item
+// Both, the key and value of the first item are returned.
 let removed_item = map.pop_front();
+
+// Removed item is (1, "a").
 assert_eq!(removed_item, Some((1, "a")));
 
-// length is now 2
+// length is now 2.
 assert_eq!(map.len(), 2);
 
-// First key is removed
+// Key is no longer in the map.
 assert_eq!(map.get(&1), None);
 
-// First key now must be the second key
+// First key now is the previous second key.
 assert_eq!(map.first(), Some((&2, &"b")));
 ```
 
@@ -270,18 +257,19 @@ map.insert(3, "c");
 
 assert_eq!(map.len(), 3);
 
-// Pop the last item
+// Both, the key and value of the last item are returned.
 let removed_item = map.pop();
 
+// Removed item is (3, "c").
 assert_eq!(removed_item, Some((3, "c")));
 
-// length is now 2
+// length is now 2.
 assert_eq!(map.len(), 2);
 
-// Last key is removed
+// Key is no longer in the map.
 assert_eq!(map.get(&3), None);
 
-// Last key now must be the second key
+// Last key now is the second key.
 assert_eq!(map.last(), Some((&2, &"b")));
 ```
 
@@ -297,50 +285,63 @@ map.insert(1, "a");
 
 assert_eq!(map.capacity(), 1);
 
-// Reserve capacity in advance
-map.reserve_capacity(10);
+// Reserve capacity in advance.
+map.reserve(10);
 
+// Capacity must be 11 now.
 assert_eq!(map.capacity(), 11);
 ```
 
 ### Shrinking the capacity to fit the number of items
 ```rust
-let mut map = OmniMap::new();
+use omni_map::OmniMap;
 
-assert_eq!(map.capacity(), 0);
+let mut map = OmniMap::default();
 
+assert_eq!(map.capacity(), 16);
+
+// Insert 10 items.
 for i in 0..10 {
 map.insert(i, i);
 }
 
+// By now the capacity is still 16.
 assert_eq!(map.capacity(), 16);
 
-// Shrink the capacity to fit
+// Length is 10.
+assert_eq!(map.len(), 10);
+
 map.shrink_to_fit();
 
-assert_eq!(, 10);
-
-// Capacity is now equal to the number of items
+// Capacity is now equal to the number of items.
 assert_eq!(map.capacity(), 10);
 ```
 
-### Shrinking the capacity to a specific capacity
+### Shrinking the map to a specific capacity
 ```rust
-let mut map = OmniMap::new();
+use omni_map::OmniMap;
 
-assert_eq!(map.capacity(), 0);
+let mut map = OmniMap::default();
+
+assert_eq!(map.capacity(), 16);
 
 for i in 0..10 {
 map.insert(i, i);
 }
 
+// By now, the capacity is still 16.
 assert_eq!(map.capacity(), 16);
 
-// Shrink the capacity to 12
+// In order to take effect, new capacity must be less than the current capacity and
+// greater than or equal to the number of items in the map.
 map.shrink_to(12);
 
-assert_eq!(map.len(), 10);
+// Capacity is now 12.
+assert_eq!(map.capacity(), 12);
 
-// Capacity has been shrunk to 12
+// Shrinking the capacity to a value less than the number of items is no-op.
+map.shrink_to(8);
+
+// Capacity will not change.
 assert_eq!(map.capacity(), 12);
 ```
