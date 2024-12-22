@@ -1151,32 +1151,45 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_for_loop() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(3);
         alloc_vec.push(1);
         alloc_vec.push(2);
         alloc_vec.push(3);
-
         let mut sum = 0;
+        // Immutable borrow
         for value in &alloc_vec {
             sum += *value;
         }
         assert_eq!(sum, 6);
+    }
 
+    #[test]
+    fn test_alloc_vec_for_loop_mut() {
+        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(3);
+        alloc_vec.push(1);
+        alloc_vec.push(2);
+        alloc_vec.push(3);
+        // Mutable borrow
         for value in &mut alloc_vec {
             *value *= 2;
         }
-
         let mut iter = alloc_vec.iter();
         assert_eq!(iter.next(), Some(&2));
         assert_eq!(iter.next(), Some(&4));
         assert_eq!(iter.next(), Some(&6));
         assert_eq!(iter.next(), None);
+    }
 
-        let alloc_vec = alloc_vec;
-        let mut iter = alloc_vec.into_iter();
+    #[test]
+    fn test_alloc_vec_into_iterator(){
+        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(3);
+        alloc_vec.push(1);
+        alloc_vec.push(2);
+        alloc_vec.push(3);
+        let mut iter: AllocVecIntoIter<i32> = alloc_vec.into_iter();
+        assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.next(), Some(2));
-        assert_eq!(iter.next(), Some(4));
-        assert_eq!(iter.next(), Some(6));
+        assert_eq!(iter.next(), Some(3));
         assert_eq!(iter.next(), None);
     }
 
