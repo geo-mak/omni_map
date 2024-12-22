@@ -135,19 +135,6 @@ fn bench_shrink_to(c: &mut Criterion) {
     });
 }
 
-fn bench_shrink_to_fit(c: &mut Criterion) {
-    // Capacity is 16384, which is 2048 more than HashMap with 10_000 items
-    c.bench_function("shrink to fit", |b| {
-        let mut map = OmniMap::new();
-        for i in 0..10_000 {
-            map.insert(i.to_string(), i);
-        }
-        b.iter(|| {
-            black_box(map.shrink_to_fit());
-        })
-    });
-}
-
 fn bench_shrink_to_hashmap(c: &mut Criterion) {
     // Capacity is 14336, which 2048 less than OmniMap with 10_000 items
     c.bench_function("shrink to 11_000 (HashMap)", |b| {
@@ -157,6 +144,19 @@ fn bench_shrink_to_hashmap(c: &mut Criterion) {
         }
         b.iter(|| {
             black_box(map.shrink_to(11_000));
+        })
+    });
+}
+
+fn bench_shrink_to_fit(c: &mut Criterion) {
+    // Capacity is 16384, which is 2048 more than HashMap with 10_000 items
+    c.bench_function("shrink to fit", |b| {
+        let mut map = OmniMap::new();
+        for i in 0..10_000 {
+            map.insert(i.to_string(), i);
+        }
+        b.iter(|| {
+            black_box(map.shrink_to_fit());
         })
     });
 }
