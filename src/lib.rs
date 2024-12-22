@@ -152,8 +152,8 @@ where
     ///
     /// assert_eq!(map.len(), 0);
     ///
-    /// map.upsert("key1".to_string(), 1);
-    /// map.upsert("key2".to_string(), 2);
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 2);
     ///
     /// assert_eq!(map.len(), 2);
     /// ```
@@ -176,7 +176,7 @@ where
     ///
     /// let mut map = OmniMap::new();
     ///
-    /// map.upsert("key1".to_string(), 1);
+    /// map.insert("key1".to_string(), 1);
     ///
     /// assert!(!map.is_empty());
     /// ```
@@ -311,7 +311,7 @@ where
     /// use omni_map::OmniMap;
     ///
     /// let mut map = OmniMap::new();
-    /// map.upsert("key1".to_string(), 1);
+    /// map.insert("key1".to_string(), 1);
     ///
     /// // Reserve space for 100 more elements
     /// map.reserve(100);
@@ -350,8 +350,8 @@ where
     /// assert_eq!(map.capacity(), 10);
     ///
     /// // Insert some elements
-    /// map.upsert("key1".to_string(), 1);
-    /// map.upsert("key2".to_string(), 2);
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 2);
     ///
     /// // Shrink the capacity to 3
     /// map.shrink_to(5);
@@ -386,8 +386,8 @@ where
     /// assert_eq!(map.capacity(), 10 );
     ///
     /// // Insert some elements
-    ///  map.upsert("key1".to_string(), 1);
-    ///  map.upsert("key2".to_string(), 2);
+    ///  map.insert("key1".to_string(), 1);
+    ///  map.insert("key2".to_string(), 2);
     ///
     /// // Shrink the capacity to fit the current length
     /// map.shrink_to_fit();
@@ -404,10 +404,9 @@ where
         }
     }
 
-    /// Inserts or updates a value with a given key.
-    ///
-    /// If the key already exists, its value is updated. If the key does not exist, a new entry is
-    /// added.
+    /// Inserts a key-value pair into the map.
+    /// If the map did not have this key present, `None` is returned.
+    /// If the map did have this key present, the value is updated, and the old value is returned.
     ///
     /// # Parameters
     /// - `key`: The key to insert or update.
@@ -422,45 +421,63 @@ where
     ///
     /// let mut map = OmniMap::new();
     ///
-    /// map.upsert("key1".to_string(), "value1".to_string());
-    /// map.upsert("key2".to_string(), "value2".to_string());
+    ///  // When inserting a new key-value pair, None is returned
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 2);
     ///
-    /// assert_eq!(map.get(&"key1".to_string()), Some(&"value1".to_string()));
-    /// assert_eq!(map.get(&"key2".to_string()), Some(&"value2".to_string()));
+    /// assert_eq!(map.get(&"key1".to_string()), Some(&1));
+    /// assert_eq!(map.get(&"key2".to_string()), Some(&2));
+    ///
+    /// // Update the value for an existing key
+    /// let old_value = map.insert("key1".to_string(), 10);
+    ///
+    /// // The old value is returned
+    /// assert_eq!(old_value, Some(1));
+    ///
+    /// // The value is updated
+    /// assert_eq!(map.get(&"key1".to_string()), Some(&10));
     /// ```
-    ///
-    pub fn upsert(&mut self, key: K, value: V) {
+    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+        // Ensure that the map has enough capacity to insert the new key-value pair.
         if self.index.capacity() == 0 {
-            // Allocate initial capacity without reindexing
+            // Allocate initial capacity without reindexing.
             self.grow(1, false);
         } else {
-            // Resize if necessary
+            // Resize if the current load exceeds the load factor.
             self.maybe_grow();
         }
 
         // Hash the key
         let hash = self.hash(&key);
+
         let capacity = self.index.capacity();
+
+        // Calculate the slot.
         let mut slot = hash % capacity;
-        // No infinite loop because maybe_grow() makes sure that capacity is larger than length
+
+        // No infinite loop because maybe_grow() makes sure that capacity is larger than length.
         while !matches!(self.index[slot], Slot::Empty) {
             if let Slot::Occupied(index) = self.index[slot] {
                 let entry = &mut self.entries[index];
                 if entry.key == key {
-                    // Key exists, update the value and return
-                    entry.value = value;
-                    return;
+                    // Key exists, update the value and return the old value.
+                    let old_value = std::mem::replace(&mut entry.value, value);
+                    return Some(old_value);
                 }
                 slot = (slot + 1) % capacity;
             } else {
-                // Slot is deleted, reuse the slot
+                // Slot is deleted, reuse the slot.
                 break;
             }
         }
-        // Insert a new entry
+
+        // Insert a new entry.
         self.entries.push(Entry::new(key, value, hash));
         let entry_index = self.entries.len() - 1;
         self.index[slot] = Slot::Occupied(entry_index);
+
+        // Return None because the key did not exist.
+        None
     }
 
     /// Retrieves a value by its key.
@@ -480,7 +497,7 @@ where
     ///
     /// let mut map = OmniMap::new();
     ///
-    /// map.upsert("key1".to_string(), 1);
+    /// map.insert("key1".to_string(), 1);
     ///
     /// assert_eq!(map.get(&"key1".to_string()), Some(&1));
     /// assert_eq!(map.get(&"nonexistent_key".to_string()), None);
@@ -513,7 +530,7 @@ where
     ///
     /// let mut map = OmniMap::new();
     ///
-    /// map.upsert("key1".to_string(), "value1".to_string());
+    /// map.insert("key1".to_string(), "value1".to_string());
     ///
     /// if let Some(value) = map.get_mut(&"key1".to_string()) {
     ///     *value = "new_value1".to_string();
@@ -546,9 +563,9 @@ where
     /// use omni_map::OmniMap;
     ///
     /// let mut map = OmniMap::new();
-    /// map.upsert("key1".to_string(), 1);
-    /// map.upsert("key2".to_string(), 2);
-    /// map.upsert("key3".to_string(), 3);
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 2);
+    /// map.insert("key3".to_string(), 3);
     ///
     /// assert_eq!(map.first(), Some((&"key1".to_string(), &1)));
     /// ```
@@ -577,9 +594,9 @@ where
     /// use omni_map::OmniMap;
     ///
     /// let mut map = OmniMap::new();
-    /// map.upsert("key1".to_string(), 1);
-    /// map.upsert("key2".to_string(), 2);
-    /// map.upsert("key3".to_string(), 3);
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 2);
+    /// map.insert("key3".to_string(), 3);
     ///
     /// assert_eq!(map.last(), Some((&"key3".to_string(), &3)));
     /// ```
@@ -616,8 +633,8 @@ where
     ///
     /// let mut map = OmniMap::new();
     ///
-    /// map.upsert("key1".to_string(), 1);
-    /// map.upsert("key2".to_string(), 2);
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 2);
     ///
     /// assert_eq!(map.len(), 2);
     ///
@@ -665,9 +682,9 @@ where
     /// use omni_map::OmniMap;
     ///
     /// let mut map = OmniMap::new();
-    /// map.upsert("key1".to_string(), 1);
-    /// map.upsert("key2".to_string(), 2);
-    /// map.upsert("key3".to_string(), 3);
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 2);
+    /// map.insert("key3".to_string(), 3);
     ///
     /// assert_eq!(map.pop_front(), Some(("key1".to_string(), 1)));
     /// assert_eq!(map.len(), 2);
@@ -700,9 +717,9 @@ where
     /// use omni_map::OmniMap;
     ///
     /// let mut map = OmniMap::new();
-    /// map.upsert("key1".to_string(), 1);
-    /// map.upsert("key2".to_string(), 2);
-    /// map.upsert("key3".to_string(), 3);
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 2);
+    /// map.insert("key3".to_string(), 3);
     ///
     /// assert_eq!(map.pop(), Some(("key3".to_string(), 3)));
     /// assert_eq!(map.len(), 2);
@@ -736,8 +753,8 @@ where
     /// use omni_map::OmniMap;
     ///
     /// let mut map = OmniMap::new();
-    /// map.upsert("key1".to_string(), 1);
-    /// map.upsert("key2".to_string(), 2);
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 2);
     ///
     /// assert_eq!(map.len(), 2);
     ///
@@ -763,8 +780,8 @@ where
     ///
     /// let mut map = OmniMap::new();
     ///
-    /// map.upsert("key1".to_string(), 1);
-    /// map.upsert("key2".to_string(), 2);
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 2);
     ///
     /// let entries: Vec<(String, i32)> = map.iter().map(|(key, value)| (key.clone(), value.clone())).collect();
     ///
@@ -786,8 +803,8 @@ where
     ///
     /// let mut map = OmniMap::new();
     ///
-    /// map.upsert("key1".to_string(), 1);
-    /// map.upsert("key2".to_string(), 2);
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 2);
     ///
     /// for (key, value) in map.iter_mut() {
     ///     *value += 1;
@@ -813,8 +830,8 @@ where
     ///
     /// let mut map = OmniMap::new();
     ///
-    /// map.upsert("key1".to_string(), 1);
-    /// map.upsert("key2".to_string(), 1);
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 1);
     ///
     /// let keys: Vec<String> = map.iter_keys().cloned().collect();
     /// assert_eq!(keys, vec!["key1", "key2"]);
@@ -833,8 +850,8 @@ where
     ///
     /// let mut map = OmniMap::new();
     ///
-    /// map.upsert("key1".to_string(), 1);
-    /// map.upsert("key2".to_string(), 2);
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 2);
     ///
     /// let values: Vec<i32> = map.iter_values().cloned().collect();
     ///
@@ -904,8 +921,8 @@ impl<K, V> Index<usize> for OmniMap<K, V> {
     /// use omni_map::OmniMap;
     ///
     /// let mut map = OmniMap::new();
-    /// map.upsert("key1".to_string(), 1);
-    /// map.upsert("key2".to_string(), 2);
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 2);
     ///
     /// assert_eq!(map[0], 1);
     /// assert_eq!(map[1], 2);
@@ -934,8 +951,8 @@ impl<K, V> IndexMut<usize> for OmniMap<K, V> {
     /// use omni_map::OmniMap;
     ///
     /// let mut map = OmniMap::new();
-    /// map.upsert("key1".to_string(), 1);
-    /// map.upsert("key2".to_string(), 2);
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 2);
     ///
     /// map[0] = 10;
     /// map[1] = 20;
@@ -1006,8 +1023,8 @@ impl<K, V> IntoIterator for OmniMap<K, V> {
     /// use omni_map::OmniMap;
     ///
     /// let mut map = OmniMap::new();
-    /// map.upsert("key1".to_string(), 1);
-    /// map.upsert("key2".to_string(), 2);
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 2);
     ///
     /// let mut iter = map.into_iter();
     /// assert_eq!(iter.next(), Some(("key1".to_string(), 1)));
@@ -1067,8 +1084,8 @@ where
     /// use omni_map::OmniMap;
     ///
     /// let mut map = OmniMap::with_capacity(5);
-    /// map.upsert("key1".to_string(), 1);
-    /// map.upsert("key2".to_string(), 2);
+    /// map.insert("key1".to_string(), 1);
+    /// map.insert("key2".to_string(), 2);
     ///
     /// let compact_clone = map.clone_compact();
     ///
@@ -1125,10 +1142,10 @@ mod tests {
 
     #[test]
     fn test_create_map_with_capacity() {
-        let map: OmniMap<String, i32> = OmniMap::with_capacity(1000);
+        let map: OmniMap<String, i32> = OmniMap::with_capacity(10);
         assert!(map.is_empty());
         assert_eq!(map.len(), 0);
-        assert_eq!(map.capacity(), 1000);
+        assert_eq!(map.capacity(), 10);
     }
 
     #[test]
@@ -1145,19 +1162,19 @@ mod tests {
         let mut map = OmniMap::new();
         assert_eq!(map.load_factor(), 0.0); // Empty map
 
-        map.upsert("key1".to_string(), 1);
+        map.insert("key1".to_string(), 1);
         assert_eq!(map.load_factor(), 1.0); // Full capacity 1
 
-        map.upsert("key2".to_string(), 2);
+        map.insert("key2".to_string(), 2);
         assert_eq!(map.load_factor(), 1.0); // Full capacity 2
 
-        map.upsert("key3".to_string(), 3);
+        map.insert("key3".to_string(), 3);
         assert_eq!(map.load_factor(), 0.75); // 3/4 of new capacity 4, which is exactly the threshold
 
-        map.upsert("key4".to_string(), 4);
+        map.insert("key4".to_string(), 4);
         assert_eq!(map.load_factor(), 1.0); // Full capacity 4
 
-        map.upsert("key5".to_string(), 5);
+        map.insert("key5".to_string(), 5);
         assert_eq!(map.load_factor(), 0.625); // 5/8 of new capacity 8
     }
 
@@ -1170,30 +1187,51 @@ mod tests {
     }
 
     #[test]
-    fn test_map_upsert_get() {
+    fn test_map_insert_get() {
         let mut map = OmniMap::new();
 
-        map.upsert(1, 1);
-        map.upsert(2, 2);
-        assert_eq!(map.len(), 2);
-        assert_eq!(map.get(&1), Some(&1));
-        assert_eq!(map.get(&2), Some(&2));
+        // Insert a key-value pair.
+        // Must return None because the keys did not exist.
+        assert_eq!(map.insert(1, 2), None);
+        assert_eq!(map.insert(2, 3), None);
 
-        // Update existing key
-        map.upsert(1, 10);
+        // Length must be 2.
         assert_eq!(map.len(), 2);
-        assert_eq!(map.get(&1), Some(&10));
-        assert_eq!(map.get(&2), Some(&2));
 
-        // Get nonexistent key
+        // Get the values.
+        assert_eq!(map.get(&1), Some(&2));
+        assert_eq!(map.get(&2), Some(&3));
+
+        // Get nonexistent key.
         assert_eq!(map.get(&3), None);
+    }
+
+    #[test]
+    fn test_map_insert_update() {
+        let mut map = OmniMap::new();
+
+        // Insert a key-value pair
+        assert_eq!(map.insert(1, 2), None);
+        assert_eq!(map.get(&1), Some(&2));
+
+        // Update the value for the same key
+        assert_eq!(map.insert(1, 22), Some(2));
+        assert_eq!(map.get(&1), Some(&22));
+
+        // Insert another key-value pair
+        assert_eq!(map.insert(2, 3), None);
+        assert_eq!(map.get(&2), Some(&3));
+
+        // Update the value for the second key
+        assert_eq!(map.insert(2, 33), Some(3));
+        assert_eq!(map.get(&2), Some(&33));
     }
 
     #[test]
     fn test_map_get_mut() {
         let mut map = OmniMap::new();
 
-        map.upsert(1, 1);
+        map.insert(1, 1);
 
         if let Some(value) = map.get_mut(&1) {
             *value = 10;
@@ -1205,9 +1243,9 @@ mod tests {
     #[test]
     fn test_map_access_index() {
         let mut map = OmniMap::new();
-        map.upsert(1, 1);
-        map.upsert(2, 2);
-        map.upsert(3, 3);
+        map.insert(1, 1);
+        map.insert(2, 2);
+        map.insert(3, 3);
 
         assert_eq!(map[0], 1);
         assert_eq!(map[1], 2);
@@ -1225,9 +1263,9 @@ mod tests {
     #[test]
     fn test_map_access_index_mut() {
         let mut map = OmniMap::new();
-        map.upsert(1, 1);
-        map.upsert(2, 2);
-        map.upsert(3, 3);
+        map.insert(1, 1);
+        map.insert(2, 2);
+        map.insert(3, 3);
 
         map[0] = 10;
         map[1] = 20;
@@ -1242,7 +1280,7 @@ mod tests {
     #[should_panic(expected = "Index out of bounds")]
     fn test_map_index_out_of_bounds() {
         let mut map = OmniMap::new();
-        map.upsert(1, 1);
+        map.insert(1, 1);
 
         // ok
         assert_eq!(map[0], 1);
@@ -1254,9 +1292,9 @@ mod tests {
     #[test]
     fn test_map_insertion_order() {
         let mut map = OmniMap::new();
-        map.upsert(1, 1);
-        map.upsert(2, 2);
-        map.upsert(3, 3);
+        map.insert(1, 1);
+        map.insert(2, 2);
+        map.insert(3, 3);
 
         assert_eq!(
             map.iter().collect::<Vec<(&i32, &i32)>>(),
@@ -1267,9 +1305,9 @@ mod tests {
     #[test]
     fn test_map_get_first() {
         let mut map = OmniMap::new();
-        map.upsert(1, 1);
-        map.upsert(2, 2);
-        map.upsert(3, 3);
+        map.insert(1, 1);
+        map.insert(2, 2);
+        map.insert(3, 3);
 
         assert_eq!(map.first(), Some((&1, &1)));
     }
@@ -1277,9 +1315,9 @@ mod tests {
     #[test]
     fn test_map_get_last() {
         let mut map = OmniMap::new();
-        map.upsert(1, 1);
-        map.upsert(2, 2);
-        map.upsert(3, 3);
+        map.insert(1, 1);
+        map.insert(2, 2);
+        map.insert(3, 3);
 
         assert_eq!(map.last(), Some((&3, &3)));
     }
@@ -1287,9 +1325,9 @@ mod tests {
     #[test]
     fn test_map_pop_front() {
         let mut map = OmniMap::new();
-        map.upsert(1, 1); // First key
-        map.upsert(2, 2);
-        map.upsert(3, 3);
+        map.insert(1, 1); // First key
+        map.insert(2, 2);
+        map.insert(3, 3);
 
         assert_eq!(map.len(), 3);
 
@@ -1305,9 +1343,9 @@ mod tests {
     #[test]
     fn test_map_pop() {
         let mut map = OmniMap::new();
-        map.upsert(1, 1);
-        map.upsert(2, 2);
-        map.upsert(3, 3); // Last key
+        map.insert(1, 1);
+        map.insert(2, 2);
+        map.insert(3, 3); // Last key
 
         assert_eq!(map.len(), 3);
 
@@ -1326,8 +1364,8 @@ mod tests {
     #[test]
     fn test_map_remove_existing_key() {
         let mut map = OmniMap::new();
-        map.upsert(1, 1);
-        map.upsert(2, 2);
+        map.insert(1, 1);
+        map.insert(2, 2);
 
         assert_eq!(map.len(), 2);
 
@@ -1342,7 +1380,7 @@ mod tests {
     #[test]
     fn test_map_remove_nonexistent_key() {
         let mut map = OmniMap::new();
-        map.upsert(1, 1);
+        map.insert(1, 1);
 
         assert_eq!(map.len(), 1);
 
@@ -1359,10 +1397,10 @@ mod tests {
         let mut map = OmniMap::new();
 
         // Insert 4 items
-        map.upsert(1, 1);
-        map.upsert(2, 2);
-        map.upsert(3, 3);
-        map.upsert(4, 4);
+        map.insert(1, 1);
+        map.insert(2, 2);
+        map.insert(3, 3);
+        map.insert(4, 4);
 
         assert_eq!(map.len(), 4);
 
@@ -1384,7 +1422,7 @@ mod tests {
     #[test]
     fn test_map_clear() {
         let mut map = OmniMap::new();
-        map.upsert(1, 1);
+        map.insert(1, 1);
 
         assert_eq!(map.len(), 1);
         assert_eq!(map.capacity(), 1);
@@ -1395,7 +1433,7 @@ mod tests {
         assert_eq!(map.capacity(), 1); // Capacity must not change
 
         // Insert
-        map.upsert(1, 1);
+        map.insert(1, 1);
 
         assert_eq!(map.len(), 1);
     }
@@ -1406,7 +1444,7 @@ mod tests {
 
         assert_eq!(map.capacity(), 0);
 
-        map.upsert(1, 1);
+        map.insert(1, 1);
 
         assert_eq!(map.capacity(), 1);
 
@@ -1425,7 +1463,7 @@ mod tests {
         assert_eq!(map.capacity(), 0);
 
         for i in 0..10 {
-            map.upsert(i, i);
+            map.insert(i, i);
         }
 
         assert_eq!(map.capacity(), 16);
@@ -1441,7 +1479,7 @@ mod tests {
 
         // Insert 5 more elements
         for i in 10..15 {
-            map.upsert(i, i);
+            map.insert(i, i);
         }
 
         assert_eq!(map.len(), 15);
@@ -1466,9 +1504,9 @@ mod tests {
     #[test]
     fn test_into_iter_ordered() {
         let mut map = OmniMap::new();
-        map.upsert(1, 1);
-        map.upsert(2, 2);
-        map.upsert(3, 3);
+        map.insert(1, 1);
+        map.insert(2, 2);
+        map.insert(3, 3);
 
         let mut iter = map.into_iter();
 
@@ -1481,9 +1519,9 @@ mod tests {
     #[test]
     fn test_map_for_loop() {
         let mut map = OmniMap::new();
-        map.upsert("key1".to_string(), 1);
-        map.upsert("key2".to_string(), 2);
-        map.upsert("key3".to_string(), 3);
+        map.insert("key1".to_string(), 1);
+        map.insert("key2".to_string(), 2);
+        map.insert("key3".to_string(), 3);
 
         // Immutable borrow
         for (key, value) in &map {
@@ -1499,8 +1537,8 @@ mod tests {
     #[test]
     fn test_map_clone() {
         let mut original: OmniMap<String, i32> = OmniMap::with_capacity(3);
-        original.upsert("key1".to_string(), 1);
-        original.upsert("key2".to_string(), 2);
+        original.insert("key1".to_string(), 1);
+        original.insert("key2".to_string(), 2);
 
         let mut cloned = original.clone();
 
@@ -1514,7 +1552,7 @@ mod tests {
         }
 
         // Modifying the clone must not affect the original
-        cloned.upsert("key3".to_string(), 3);
+        cloned.insert("key3".to_string(), 3);
         assert_eq!(cloned.len(), original.len() + 1);
         assert_eq!(original.len(), 2); // original length
         assert_eq!(original.get(&"key3".to_string()), None); // Key in original does not exit
@@ -1523,8 +1561,8 @@ mod tests {
     #[test]
     fn test_map_clone_compact() {
         let mut original: OmniMap<String, i32> = OmniMap::with_capacity(3);
-        original.upsert("key1".to_string(), 1);
-        original.upsert("key2".to_string(), 2);
+        original.insert("key1".to_string(), 1);
+        original.insert("key2".to_string(), 2);
 
         let mut cloned = original.clone_compact();
 
@@ -1540,7 +1578,7 @@ mod tests {
         }
 
         // Modifying the clone must not affect the original
-        cloned.upsert("key3".to_string(), 3);
+        cloned.insert("key3".to_string(), 3);
         assert_eq!(cloned.len(), original.len() + 1);
         assert_eq!(original.len(), 2); // original length
         assert_eq!(original.get(&"key3".to_string()), None); // Key in original does not exit
@@ -1550,7 +1588,7 @@ mod tests {
     fn test_map_index_integrity() {
         let mut map: OmniMap<i32, i32> = OmniMap::new();
         for i in 0..100 {
-            map.upsert(i, i);
+            map.insert(i, i);
         }
 
         for i in 0..50 {
@@ -1594,9 +1632,9 @@ mod tests {
     #[test]
     fn test_omni_map_debug() {
         let mut map: OmniMap<String, i32> = OmniMap::with_capacity(3);
-        map.upsert("key1".to_string(), 1);
-        map.upsert("key2".to_string(), 2);
-        map.upsert("key3".to_string(), 3);
+        map.insert("key1".to_string(), 1);
+        map.insert("key2".to_string(), 2);
+        map.insert("key3".to_string(), 3);
 
         let debug_str = format!("{:?}", map);
         let expected_str = r#"{"key1": 1, "key2": 2, "key3": 3}"#;

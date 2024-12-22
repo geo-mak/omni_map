@@ -63,15 +63,15 @@ assert_eq!(map.len(), 0);
 assert_eq!(map.capacity(), 16);
 ```
 
-### Inserting items into the map with order preservation
+### Inserting new items into the map with order preservation
 ```rust
 use omni_map::OmniMap;
 
 let mut map = OmniMap::new();
 
-map.upsert("key1", 1);
-map.upsert("key2", 2);
-map.upsert("key3", 3);
+map.insert("key1", 1);
+map.insert("key2", 2);
+map.insert("key3", 3);
 
 assert!(!map.is_empty());
 assert_eq!(map.len(), 3);
@@ -87,15 +87,36 @@ assert_eq!(
 );
 ```
 
+### Updating value of an existing key
+```rust
+use omni_map::OmniMap;
+
+let mut map = OmniMap::new();
+
+map.insert(1, "a");
+
+// When updating an existing key, the old value is returned.
+let old_value = map.insert(1, "b");
+
+// Length must be 1.
+assert_eq!(map.len(), 1);
+
+// Old value must be "a".
+assert_eq!(old_value, Some("a"));
+
+// New value must be "b".
+assert_eq!(map.get(&1), Some(&"b"));
+```
+
 ### **Immutable** access to value by key
 ```rust
 use omni_map::OmniMap;
 
 let mut map = OmniMap::new();
 
-map.upsert("key1", 1);
-map.upsert("key2", 2);
-map.upsert("key3", 3);
+map.insert("key1", 1);
+map.insert("key2", 2);
+map.insert("key3", 3);
 
 assert_eq!(map.get("key1"), Some(&1));
 assert_eq!(map.get("key2"), Some(&2));
@@ -108,7 +129,7 @@ use omni_map::OmniMap;
 
 let mut map = OmniMap::new();
 
-map.upsert("key1".to_string(), 1);
+map.insert("key1".to_string(), 1);
 
 if let Some(value) = map.get_mut(&"key1".to_string()) {
         // Mutate the value
@@ -125,9 +146,9 @@ use omni_map::OmniMap;
 
 let mut map = OmniMap::new();
 
-map.upsert("key1".to_string(), 1);
-map.upsert("key2".to_string(), 2);
-map.upsert("key3".to_string(), 3);
+map.insert("key1".to_string(), 1);
+map.insert("key2".to_string(), 2);
+map.insert("key3".to_string(), 3);
 
 assert_eq!(map[0], 1);
 assert_eq!(map[1], 2);
@@ -148,9 +169,9 @@ use omni_map::OmniMap;
 
 let mut map = OmniMap::new();
 
-map.upsert("key1".to_string(), 1);
-map.upsert("key2".to_string(), 2);
-map.upsert("key3".to_string(), 3);
+map.insert("key1".to_string(), 1);
+map.insert("key2".to_string(), 2);
+map.insert("key3".to_string(), 3);
 
 // Mutate the values by index
 map[0] = 10;
@@ -168,32 +189,15 @@ use omni_map::OmniMap;
 
 let mut map = OmniMap::new();
 
-map.upsert("key1".to_string(), 1);
-map.upsert("key2".to_string(), 2);
-map.upsert("key3".to_string(), 3);
+map.insert("key1".to_string(), 1);
+map.insert("key2".to_string(), 2);
+map.insert("key3".to_string(), 3);
 
 // First key is "key1" with value 1
 assert_eq!(map.first(), Some((&"key1".to_string(), &1)));
 
 // Last key is "key3" with value 3
 assert_eq!(map.last(), Some((&"key3".to_string(), &3)));
-```
-
-### Updating value of an existing key
-```rust
-use omni_map::OmniMap;
-
-let mut map = OmniMap::new();
-
-map.upsert("key1".to_string(), 1);
-
-// Update the value of the same key
-map.upsert("key1".to_string(), 2);
-
-// Length must be 1
-assert_eq!(map.len(), 1);
-
-assert_eq!(map.get(&"key1".to_string()), Some(&2));
 ```
 
 ### Removing items and preserve order
@@ -203,10 +207,10 @@ use omni_map::OmniMap;
 let mut map = OmniMap::new();
 
 // Insert 4 items
-map.upsert("key1".to_string(), 1);
-map.upsert("key2".to_string(), 2);
-map.upsert("key3".to_string(), 3);
-map.upsert("key4".to_string(), 4);
+map.insert("key1".to_string(), 1);
+map.insert("key2".to_string(), 2);
+map.insert("key3".to_string(), 3);
+map.insert("key4".to_string(), 4);
 
 assert_eq!(map.len(), 4);
 
@@ -234,9 +238,9 @@ use omni_map::OmniMap;
 
 let mut map = OmniMap::new();
 
-map.upsert("key1".to_string(), 1);
-map.upsert("key2".to_string(), 2);
-map.upsert("key3".to_string(), 3);
+map.insert("key1".to_string(), 1);
+map.insert("key2".to_string(), 2);
+map.insert("key3".to_string(), 3);
 
 assert_eq!(map.len(), 3);
 
@@ -260,9 +264,9 @@ use omni_map::OmniMap;
 
 let mut map = OmniMap::new();
 
-map.upsert("key1".to_string(), 1);
-map.upsert("key2".to_string(), 2);
-map.upsert("key3".to_string(), 3);
+map.insert("key1".to_string(), 1);
+map.insert("key2".to_string(), 2);
+map.insert("key3".to_string(), 3);
 
 assert_eq!(map.len(), 3);
 
@@ -287,7 +291,7 @@ let mut map = OmniMap::new();
 
 assert_eq!(map.capacity(), 0);
 
-map.upsert("key1".to_string(), 1);
+map.insert("key1".to_string(), 1);
 
 assert_eq!(map.capacity(), 1);
 
@@ -304,7 +308,7 @@ let mut map = OmniMap::new();
 assert_eq!(map.capacity(), 0);
 
 for i in 0..10 {
-map.upsert(i, i);
+map.insert(i, i);
 }
 
 assert_eq!(map.capacity(), 16);
@@ -324,7 +328,7 @@ let mut map = OmniMap::new();
 assert_eq!(map.capacity(), 0);
 
 for i in 0..10 {
-map.upsert(i, i);
+map.insert(i, i);
 }
 
 assert_eq!(map.capacity(), 16);
