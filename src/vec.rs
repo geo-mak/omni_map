@@ -10,12 +10,13 @@ use std::fmt::Debug;
 ///
 /// # Safety
 ///
-/// * AllocVec does not allow `zero-sized types` (ZSTs).
+/// - `AllocVec` does not allow `zero-sized types` (ZSTs).
 ///   Initializing with `ZSTs` will panic to avoid `undefined behavior`.
 ///   Handling of ZSTs is left to the caller.
 ///
-/// * The memory layout will panic in case of capacity overflow (exceeding `isize::MAX` bytes).
-///   Handling of capacity overflow to avoid panics is left to the caller.
+/// - The total size of the allocated memory must not exceed `isize::MAX` bytes.
+///   If the total size exceeds `isize::MAX` bytes, the memory allocation will panic.
+///   Ensuring that the total size does not exceed `isize::MAX` bytes is left to the caller.
 ///
 /// # Internal representation:
 ///
@@ -141,7 +142,7 @@ impl<T> AllocVec<T> {
     /// Panics if the memory allocation fails due to capacity overflow.
     ///
     /// # Time Complexity
-    /// - *O*(n) where n is the new capacity.
+    /// - _O_(n) where n is the new capacity.
     ///
     #[inline]
     pub(crate) fn reserve(&mut self, additional: usize) {
@@ -162,7 +163,7 @@ impl<T> AllocVec<T> {
     /// * `new_cap` - The new capacity of the `AllocVec`.
     ///
     /// # Time Complexity
-    /// - *O*(n) where n is the new capacity of the `AllocVec`.
+    /// - _O_(n) where n is the new capacity of the `AllocVec`.
     ///
     #[inline]
     pub(crate) fn shrink_to(&mut self, new_cap: usize) {
@@ -182,7 +183,7 @@ impl<T> AllocVec<T> {
     /// This method will panic if the new layout for the reallocation cannot be created.
     ///
     /// # Time Complexity
-    /// - *O*(n) where n is the length of the `AllocVec`.
+    /// - _O_(n) where n is the length of the `AllocVec`.
     ///
     #[inline]
     pub(crate) fn shrink_to_fit(&mut self) {
@@ -207,7 +208,7 @@ impl<T> AllocVec<T> {
     /// * `f` - The function to generate new elements.
     ///
     /// # Time Complexity
-    /// - *O*(n) where n is the new length of the `AllocVec`.
+    /// - _O_(n) where n is the new length of the `AllocVec`.
     ///
     pub(crate) fn resize_with<F>(&mut self, new_len: usize, mut f: F)
     where
@@ -248,7 +249,7 @@ impl<T> AllocVec<T> {
     /// * `value` - The value to append.
     ///
     /// # Time Complexity
-    /// - Amortized *O*(1).
+    /// - Amortized _O_(1).
     ///
     #[inline]
     pub(crate) fn push(&mut self, value: T) {
@@ -276,7 +277,7 @@ impl<T> AllocVec<T> {
     /// * `Err(value)` if the `AllocVec` is at full capacity.
     ///
     /// # Time Complexity
-    /// - *O*(1).
+    /// - _O_(1).
     ///
     #[inline]
     pub(crate) fn try_push(&mut self, value: T) -> Result<(), T> {
@@ -298,7 +299,7 @@ impl<T> AllocVec<T> {
     /// * `index` - The index of the element to retrieve.
     ///
     /// # Time Complexity
-    /// - *O*(1).
+    /// - _O_(1).
     ///
     #[must_use]
     #[inline]
@@ -317,7 +318,7 @@ impl<T> AllocVec<T> {
     /// * `index` - The index of the element to retrieve.
     ///
     /// # Time Complexity
-    /// - *O*(1).
+    /// - _O_(1).
     ///
     #[must_use]
     #[inline]
@@ -336,7 +337,7 @@ impl<T> AllocVec<T> {
     /// Panics if the `AllocVec` is empty.
     ///
     /// # Time Complexity
-    /// - *O*(1).
+    /// - _O_(1).
     ///
     #[must_use]
     #[inline]
@@ -352,7 +353,7 @@ impl<T> AllocVec<T> {
     /// Panics if the `AllocVec` is empty.
     ///
     /// # Time Complexity
-    /// - *O*(1).
+    /// - _O_(1).
     ///
     #[must_use]
     #[inline]
@@ -372,7 +373,7 @@ impl<T> AllocVec<T> {
     /// Panics if the index is out of bounds.
     ///
     /// # Time Complexity
-    /// -*O*(n) where n is the length of the `AllocVec`.
+    /// -_O_(n) where n is the length of the `AllocVec`.
     ///
     pub(crate) fn remove(&mut self, index: usize) -> T {
         assert!(index < self.len, "Index out of bounds");
@@ -394,7 +395,7 @@ impl<T> AllocVec<T> {
     /// Panics if the `AllocVec` is empty.
     ///
     /// # Time Complexity
-    /// - *O*(1).
+    /// - _O_(1).
     ///
     #[inline]
     pub(crate) fn pop(&mut self) -> T {
@@ -410,7 +411,7 @@ impl<T> AllocVec<T> {
     /// Panics if the `AllocVec` is empty.
     ///
     /// # Time Complexity
-    /// - *O*(n) where n is the length of the `AllocVec`.
+    /// - _O_(n) where n is the length of the `AllocVec`.
     ///
     #[inline]
     pub(crate) fn pop_front(&mut self) -> T {
@@ -435,7 +436,7 @@ impl<T> AllocVec<T> {
     /// Panics if the index is out of bounds.
     ///
     /// # Time Complexity
-    /// - *O*(1).
+    /// - _O_(1).
     ///
     #[inline]
     pub(crate) fn replace(&mut self, index: usize, new_value: T) {
@@ -458,7 +459,7 @@ impl<T> AllocVec<T> {
     /// Panics if either index is out of bounds.
     ///
     /// # Time Complexity
-    /// - *O*(1).
+    /// - _O_(1).
     ///
     #[inline]
     pub(crate) fn swap(&mut self, index1: usize, index2: usize) {
@@ -482,7 +483,7 @@ impl<T> AllocVec<T> {
     /// Panics if `chunk_size` is 0.
     ///
     /// # Time Complexity
-    /// - *O*(1).
+    /// - _O_(1).
     ///
     #[inline]
     pub(crate) fn chunks(&self, chunk_size: usize) -> std::slice::Chunks<'_, T> {
@@ -501,7 +502,7 @@ impl<T> AllocVec<T> {
     /// Panics if `chunk_size` is 0.
     ///
     /// # Time Complexity
-    /// - *O*(1).
+    /// - _O_(1).
     ///
     #[inline]
     pub(crate) fn chunks_mut(&mut self, chunk_size: usize) -> std::slice::ChunksMut<'_, T> {
@@ -514,7 +515,7 @@ impl<T> AllocVec<T> {
     /// Returns an iterator over the elements of the `AllocVec`.
     ///
     /// # Time Complexity
-    /// - *O*(1).
+    /// - _O_(1).
     ///
     #[inline]
     pub(crate) fn iter(&self) -> std::slice::Iter<'_, T> {
@@ -524,7 +525,7 @@ impl<T> AllocVec<T> {
     /// Returns a mutable iterator over the elements of the `AllocVec`.
     ///
     /// # Time Complexity
-    /// - *O*(1).
+    /// - _O_(1).
     ///
     #[inline]
     pub(crate) fn iter_mut(&mut self) -> std::slice::IterMut<'_, T> {
@@ -534,7 +535,7 @@ impl<T> AllocVec<T> {
     /// Clears the `AllocVec` and calls `drop` on elements.
     ///
     /// # Time Complexity
-    /// - *O*(n) where n is the length of the `AllocVec`.
+    /// - _O_(n) where n is the length of the `AllocVec`.
     ///
     #[inline]
     pub(crate) fn clear(&mut self) {

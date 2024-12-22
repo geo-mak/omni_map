@@ -195,7 +195,8 @@ where
         let capacity = self.index.capacity();
         let mut slot = hash % capacity;
         let mut step = 0;
-        // Edge case: if capacity is full and all slots are occupied, it will be an infinite loop
+        // EDGE CASE: if capacity is full and all slots are occupied, it will be an infinite loop,
+        // but this is prevented by making sure that step is less than capacity.
         while step < capacity {
             if matches!(self.index[slot], Slot::Empty) {
                 // Slot is empty, key does not exist
@@ -294,7 +295,7 @@ where
     /// The resulting capacity will be equal to `self.capacity() + additional` exactly.
     ///
     /// # Time Complexity
-    /// - *O*(n) on average, where *n* is the number of elements in the map.
+    /// - _O_(n) on average, where *n* is the number of elements in the map.
     ///
     /// # Parameters
     /// - `additional`: The number of additional elements to reserve space for.
@@ -333,7 +334,7 @@ where
     /// This method will reindex the map after shrinking.
     ///
     /// # Time Complexity
-    /// - *O*(n) on average, where *n* is the number of elements in the map.
+    /// - _O_(n) on average, where *n* is the number of elements in the map.
     ///
     /// # Examples
     /// ```
@@ -368,7 +369,7 @@ where
     /// This method will reindex the map after shrinking.
     ///
     /// # Time Complexity
-    /// - *O*(n) on average, where *n* is the number of elements in the map.
+    /// - _O_(n) on average, where *n* is the number of elements in the map.
     ///
     /// # Examples
     /// ```
@@ -405,7 +406,7 @@ where
     /// - `value`: The value to associate with the key.
     ///
     /// # Time Complexity
-    /// - Amortized *O*(1).
+    /// - Amortized _O_(1).
     ///
     /// # Examples
     /// ```
@@ -481,7 +482,7 @@ where
     /// An `Option` containing the value if the key is found, or `None` if the key does not exist.
     ///
     /// # Time Complexity
-    /// - *O*(1) on average.
+    /// - _O_(1) on average.
     ///
     /// # Examples
     /// ```
@@ -515,7 +516,7 @@ where
     /// An `Option` containing a mutable reference to the value if the key is found, or `None` if the key does not exist.
     ///
     /// # Time Complexity
-    /// - *O*(1) on average.
+    /// - _O_(1) on average.
     ///
     /// # Examples
     /// ```
@@ -550,7 +551,7 @@ where
     /// An `Option` containing the key-value pair of the first inserted entry if the map is not empty.
     ///
     /// # Time Complexity
-    /// - *O*(1).
+    /// - _O_(1).
     ///
     /// # Examples
     /// ```
@@ -580,7 +581,7 @@ where
     /// An `Option` containing the key-value pair of the last inserted entry if the map is not empty.
     ///
     /// # Time Complexity
-    /// - *O*(1).
+    /// - _O_(1).
     ///
     /// # Examples
     /// ```
@@ -613,8 +614,8 @@ where
     /// `true` if the key was found and removed, `false` otherwise.
     ///
     /// # Time Complexity
-    /// - *O*(n) in the worst case.
-    /// - *O*(1) if the entry is the last entry.
+    /// - _O_(n) in the worst case.
+    /// - _O_(1) if the entry is the last entry.
     ///
     /// # Note
     /// This method does not shrink the current capacity of the map.
@@ -665,7 +666,7 @@ where
     /// An `Option` containing the key-value pair if the map is not empty.
     ///
     /// # Time Complexity
-    /// - *O*(n) in the worst case.
+    /// - _O_(n) in the worst case.
     ///
     /// # Note
     /// This method does not shrink the current capacity of the map.
@@ -699,7 +700,7 @@ where
     /// An `Option` containing the key-value pair if the map is not empty.
     ///
     /// # Time Complexity
-    /// - *O*(1) on average.
+    /// - _O_(1) on average.
     ///
     /// # Note
     /// This method does not shrink the current capacity of the map.
@@ -737,7 +738,7 @@ where
     /// This method does not shrink the current capacity of the map.
     ///
     /// # Time Complexity
-    /// - *O*(n).
+    /// - _O_(n).
     ///
     /// # Examples
     /// ```
