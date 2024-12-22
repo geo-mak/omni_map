@@ -992,18 +992,17 @@ impl<'a, K, V> IntoIterator for &'a mut OmniMap<K, V> {
 
 pub struct OmniMapIntoIter<K, V> {
     map: OmniMap<K, V>,
-    index: usize,
 }
 
 impl<K, V> Iterator for OmniMapIntoIter<K, V> {
     type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.map.entries.len() {
-            let entry = self.map.entries.remove(self.index);
-            Some((entry.key, entry.value))
-        } else {
+        if self.map.entries.is_empty() {
             None
+        } else {
+            let entry = self.map.entries.remove(0);
+            Some((entry.key, entry.value))
         }
     }
 }
@@ -1035,7 +1034,6 @@ impl<K, V> IntoIterator for OmniMap<K, V> {
     fn into_iter(self) -> Self::IntoIter {
         OmniMapIntoIter {
             map: self,
-            index: 0,
         }
     }
 }
@@ -1519,19 +1517,49 @@ mod tests {
     #[test]
     fn test_map_for_loop() {
         let mut map = OmniMap::new();
-        map.insert("key1".to_string(), 1);
-        map.insert("key2".to_string(), 2);
-        map.insert("key3".to_string(), 3);
+        map.insert(1, 2);
+        map.insert(2, 3);
+        map.insert(3, 4);
 
         // Immutable borrow
         for (key, value) in &map {
             assert_eq!(map.get(key), Some(value));
         }
+    }
+
+    #[test]
+    fn test_map_for_loop_mut() {
+        let mut map = OmniMap::new();
+        map.insert(1, 2);
+        map.insert(2, 3);
+        map.insert(3, 4);
 
         // Mutable borrow
         for (_, value) in &mut map {
             *value += 1;
         }
+
+        assert_eq!(map.get(&1), Some(&3));
+        assert_eq!(map.get(&2), Some(&4));
+        assert_eq!(map.get(&3), Some(&5));
+    }
+
+    #[test]
+    fn test_into_iterator_consumes_map() {
+        let mut map = OmniMap::new();
+        map.insert(1, 2);
+        map.insert(2, 3);
+        map.insert(3, 4);
+
+        let mut iter: OmniMapIntoIter<i32, i32> = map.into_iter();
+
+        assert_eq!(iter.next(), Some((1, 2)));
+        assert_eq!(iter.next(), Some((2, 3)));
+        assert_eq!(iter.next(), Some((3, 4)));
+        assert_eq!(iter.next(), None);
+
+        // The map should be consumed, so it should be empty now
+        assert_eq!(iter.map.len(), 0);
     }
 
     #[test]
