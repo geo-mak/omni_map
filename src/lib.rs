@@ -5,7 +5,7 @@ use std::fmt::{Debug, Display};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::{Index, IndexMut};
 
-use crate::vec::AllocVec;
+use crate::vec::{AllocVec, AllocVecIntoIter};
 
 #[derive(Debug)]
 pub struct Entry<K, V> {
@@ -972,19 +972,14 @@ impl<'a, K, V> IntoIterator for &'a mut OmniMap<K, V> {
 }
 
 pub struct OmniMapIntoIter<K, V> {
-    map: OmniMap<K, V>,
+    entries: AllocVecIntoIter<Entry<K, V>>,
 }
 
 impl<K, V> Iterator for OmniMapIntoIter<K, V> {
     type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.map.entries.is_empty() {
-            None
-        } else {
-            let entry = self.map.entries.remove(0);
-            Some((entry.key, entry.value))
-        }
+        self.entries.next().map(|entry| (entry.key, entry.value))
     }
 }
 
@@ -1015,7 +1010,7 @@ impl<K, V> IntoIterator for OmniMap<K, V> {
     /// ```
     fn into_iter(self) -> Self::IntoIter {
         OmniMapIntoIter {
-            map: self,
+           entries: self.entries.into_iter(),
         }
     }
 }
@@ -1542,9 +1537,6 @@ mod tests {
         assert_eq!(iter.next(), Some((2, 3)));
         assert_eq!(iter.next(), Some((3, 4)));
         assert_eq!(iter.next(), None);
-
-        // The map should be consumed, so it should be empty now
-        assert_eq!(iter.map.len(), 0);
     }
 
     #[test]
