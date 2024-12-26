@@ -621,10 +621,17 @@ impl<T> AllocVec<T> {
     }
 
     /// Returns the current memory usage of the `AllocVec` in bytes.
+    ///
+    /// The result is sum of the size of the metadata (ptr, cap and len) and the size of the
+    /// allocated elements.
+    ///
+    /// > Note:
+    /// > The result is only an approximation of the memory usage.
+    /// > For example, if `T` is `Box<A>`, the memory usage of `A` will not be included.
     #[inline]
     pub(crate) fn memory_usage(&self) -> usize {
-        // Size of the metadata (cap and len)
-        let metadata_size = size_of::<usize>() * 2;
+        // Size of the metadata (ptr, cap and len)
+        let metadata_size = size_of::<usize>() * 3;
         // Size of the allocated elements
         let elements_size = self.cap * size_of::<T>();
         // Total memory usage
@@ -1381,7 +1388,7 @@ mod tests {
     #[test]
     fn test_alloc_vec_memory_usage() {
         let vec: AllocVec<i32> = AllocVec::with_capacity(10);
-        let expected_memory_usage = size_of::<usize>() * 2 + 10 * size_of::<i32>();
+        let expected_memory_usage = size_of::<usize>() * 3 + 10 * size_of::<i32>();
         assert_eq!(vec.memory_usage(), expected_memory_usage);
     }
 
