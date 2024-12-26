@@ -737,22 +737,25 @@ impl<T: Default> AllocVec<T> {
     #[must_use]
     #[inline]
     pub(crate) fn with_capacity_and_populate(cap: usize) -> Self {
+        // Check for ZSTs
         assert_ne!(size_of::<T>(), 0, "Zero-sized types are not allowed");
+
+        // No allocation required
         if cap == 0 {
             return Self::new();
         }
-        let layout = Layout::array::<T>(cap).expect("Allocation error: layout error");
 
-        let ptr = unsafe { alloc::alloc(layout) as *mut T };
+        // Allocate layout
+        let ptr = Self::allocate_layout(cap);
 
-        let ptr = NonNull::new(ptr).expect("Allocation error: pointer is null");
-
+        // Initialize elements with default values
         unsafe {
             for i in 0..cap {
                 ptr::write(ptr.as_ptr().add(i), T::default());
             }
         }
 
+        // New allocated vector
         AllocVec {
             ptr,
             cap,
