@@ -881,12 +881,8 @@ impl<T: Clone> AllocVec<T> {
         // cap here must be greater than 0 either way (self.cap or self.len)
         let cap = if compact { self.len } else { self.cap };
 
-        // Allocate memory space
-        let layout = Layout::array::<T>(cap).expect("Cloning error: layout allocation error");
-        let ptr = unsafe { alloc::alloc(layout) as *mut T };
-
         // Set the new pointer and capacity
-        new_vec.ptr = NonNull::new(ptr).expect("Cloning error: pointer is null");
+        new_vec.ptr = Self::allocate_layout(cap);
         new_vec.cap = cap;
 
         // Clone elements
