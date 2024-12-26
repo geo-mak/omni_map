@@ -967,15 +967,15 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_new() {
-        let alloc_vec: AllocVec<i32> = AllocVec::new();
-        assert_eq!(alloc_vec.ptr.as_ptr(), 0x4 as *mut i32);
+        let alloc_vec: AllocVec<u8> = AllocVec::new();
+        assert_eq!(alloc_vec.ptr.as_ptr(), 0x1 as *mut u8);
         assert_eq!(alloc_vec.capacity(), 0);
         assert_eq!(alloc_vec.len(), 0);
     }
 
     #[test]
     fn test_alloc_vec_with_capacity() {
-        let alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         assert_eq!(alloc_vec.capacity(), 10);
         assert_eq!(alloc_vec.len(), 0);
     }
@@ -983,7 +983,7 @@ mod tests {
     #[test]
     fn test_with_capacity_and_populate() {
         let capacity = 5;
-        let alloc_vec: AllocVec<i32> = AllocVec::with_capacity_and_populate(capacity);
+        let alloc_vec: AllocVec<u8> = AllocVec::with_capacity_and_populate(capacity);
 
         // Map's length and capacity must be equal to the specified capacity
         assert_eq!(alloc_vec.len(), capacity);
@@ -991,7 +991,7 @@ mod tests {
 
         // All elements are must have been initialized to their default values
         for i in 0..capacity {
-            assert_eq!(alloc_vec[i], i32::default());
+            assert_eq!(alloc_vec[i], u8::default());
         }
     }
 
@@ -1015,7 +1015,7 @@ mod tests {
     
     #[test]
     fn test_alloc_vec_reserve() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         assert_eq!(alloc_vec.capacity(), 10);
         alloc_vec.reserve(5);
         assert_eq!(alloc_vec.capacity(), 15);
@@ -1023,7 +1023,7 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_shrink() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(1);
         alloc_vec.push(2);
         alloc_vec.push(3);
@@ -1038,7 +1038,7 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_push() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(1);
         assert!(!alloc_vec.is_empty());
         assert_eq!(alloc_vec.len(), 1);
@@ -1046,7 +1046,7 @@ mod tests {
 
     #[test]
     fn test_try_push() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(2);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(2);
         assert_eq!(alloc_vec.try_push(1), Ok(()));
         assert_eq!(alloc_vec.try_push(2), Ok(()));
 
@@ -1059,7 +1059,7 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_get() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(1);
         alloc_vec.push(2);
         alloc_vec.push(3);
@@ -1071,7 +1071,7 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_get_mut() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(1);
         alloc_vec.push(2);
         alloc_vec.push(3);
@@ -1083,7 +1083,7 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_index() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(1);
         alloc_vec.push(2);
         assert_eq!(alloc_vec[0], 1);
@@ -1093,7 +1093,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_index_out_of_bounds() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(10);
 
         let _ = alloc_vec[1];
@@ -1101,15 +1101,52 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_index_mut() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(1);
         alloc_vec[0] = 2;
         assert_eq!(alloc_vec[0], 2);
     }
 
     #[test]
+    fn test_alloc_vec_index_range() {
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
+        alloc_vec.push(1);
+        alloc_vec.push(2);
+        alloc_vec.push(3);
+        alloc_vec.push(4);
+
+        // Read values in the range [1, 3)
+        let slice = &alloc_vec[1..3];
+
+        // Verify the values
+        assert_eq!(slice, &[2, 3]);
+    }
+
+    #[test]
+    fn test_alloc_vec_index_range_mut() {
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
+        alloc_vec.push(1);
+        alloc_vec.push(2);
+        alloc_vec.push(3);
+        alloc_vec.push(4);
+
+        // Mutate values in the range [1, 4)
+        for value in &mut alloc_vec[1..3] {
+            *value *= 2;
+        }
+
+        // Verify the changes
+        assert_eq!(alloc_vec[0], 1);
+        assert_eq!(alloc_vec[1], 4);
+        assert_eq!(alloc_vec[2], 6);
+
+        // Verify the rest of the values
+        assert_eq!(alloc_vec[3], 4);
+    }
+
+    #[test]
     fn test_alloc_vec_first() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(1);
         alloc_vec.push(2);
         assert_eq!(alloc_vec.first(), &1);
@@ -1118,13 +1155,13 @@ mod tests {
     #[test]
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_first_out_of_bounds() {
-        let alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         let _ = alloc_vec.first();
     }
 
     #[test]
     fn test_alloc_vec_last() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(1);
         alloc_vec.push(2);
         assert_eq!(alloc_vec.last(), &2);
@@ -1133,13 +1170,13 @@ mod tests {
     #[test]
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_last_out_of_bounds() {
-        let alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         let _ = alloc_vec.last();
     }
 
     #[test]
     fn test_alloc_vec_pop_front() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(1);
         alloc_vec.push(2);
         alloc_vec.push(3);
@@ -1152,13 +1189,13 @@ mod tests {
     #[test]
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_pop_front_out_of_bounds() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.pop_front();
     }
 
     #[test]
     fn test_alloc_vec_pop() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(42);
         assert_eq!(alloc_vec.pop(), 42);
         assert_eq!(alloc_vec.len(), 0);
@@ -1168,13 +1205,13 @@ mod tests {
     #[test]
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_pop_out_of_bounds() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.pop();
     }
 
     #[test]
     fn test_alloc_vec_remove() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(1);
         alloc_vec.push(2);
         assert_eq!(alloc_vec.remove(0), 1);
@@ -1185,13 +1222,13 @@ mod tests {
     #[test]
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_remove_out_of_bounds() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         assert_eq!(alloc_vec.remove(0), 1);
     }
 
     #[test]
     fn test_alloc_vec_resize_with() {
-        let mut alloc_vec: AllocVec<i8> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
 
         // Resize to 3 elements with a default value of 1
         alloc_vec.resize_with(2, || 1);
@@ -1237,9 +1274,9 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_truncate() {
-        let mut alloc_vec: AllocVec<i8> = AllocVec::new();
+        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
 
-        assert_eq!(alloc_vec.ptr.as_ptr(), 0x1 as *mut i8);
+        assert_eq!(alloc_vec.ptr.as_ptr(), 0x1 as *mut u8);
 
         // Truncate prior to allocation (no effect)
         alloc_vec.truncate(0);
@@ -1283,7 +1320,7 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_swap() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(3);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(3);
         alloc_vec.push(1);
         alloc_vec.push(2);
         alloc_vec.push(3);
@@ -1294,7 +1331,7 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_replace() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(3);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(3);
         alloc_vec.push(1);
         alloc_vec.push(2);
         alloc_vec.push(3);
@@ -1304,7 +1341,7 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_iter() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(1);
         alloc_vec.push(2);
         alloc_vec.push(3);
@@ -1317,7 +1354,7 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_iter_mut() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(1);
         alloc_vec.push(2);
         alloc_vec.push(3);
@@ -1333,7 +1370,7 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_clear() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(1);
         alloc_vec.push(2);
         alloc_vec.push(3);
@@ -1344,7 +1381,7 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_for_loop() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(3);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(3);
         alloc_vec.push(1);
         alloc_vec.push(2);
         alloc_vec.push(3);
@@ -1358,7 +1395,7 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_for_loop_mut() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(3);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(3);
         alloc_vec.push(1);
         alloc_vec.push(2);
         alloc_vec.push(3);
@@ -1375,11 +1412,11 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_into_iterator(){
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(3);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(3);
         alloc_vec.push(1);
         alloc_vec.push(2);
         alloc_vec.push(3);
-        let mut iter: AllocVecIntoIter<i32> = alloc_vec.into_iter();
+        let mut iter: AllocVecIntoIter<u8> = alloc_vec.into_iter();
         assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.next(), Some(2));
         assert_eq!(iter.next(), Some(3));
@@ -1388,49 +1425,49 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_deref_empty() {
-        let alloc_vec: AllocVec<i32> = AllocVec::new();
-        let slice: &[i32] = &*alloc_vec;
+        let alloc_vec: AllocVec<u8> = AllocVec::new();
+        let slice: &[u8] = &*alloc_vec;
         assert_eq!(slice, &[]);
     }
 
     #[test]
     fn test_alloc_vec_deref() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(1);
         alloc_vec.push(2);
         alloc_vec.push(3);
-        let slice: &[i32] = &*alloc_vec;
+        let slice: &[u8] = &*alloc_vec;
         assert_eq!(slice, &[1, 2, 3]);
     }
 
     #[test]
     fn test_alloc_vec_deref_mut_empty() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::new();
-        let slice: &mut [i32] = &mut *alloc_vec;
+        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
+        let slice: &mut [u8] = &mut *alloc_vec;
         assert_eq!(slice, &[]);
     }
 
     #[test]
     fn test_alloc_vec_deref_mut() {
-        let mut alloc_vec: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(1);
         alloc_vec.push(2);
         alloc_vec.push(3);
-        let slice: &mut [i32] = &mut *alloc_vec;
+        let slice: &mut [u8] = &mut *alloc_vec;
         slice[0] = 10;
         assert_eq!(slice, &[10, 2, 3]);
     }
 
     #[test]
     fn test_alloc_vec_memory_usage() {
-        let vec: AllocVec<i32> = AllocVec::with_capacity(10);
-        let expected_memory_usage = size_of::<usize>() * 3 + 10 * size_of::<i32>();
+        let vec: AllocVec<u8> = AllocVec::with_capacity(10);
+        let expected_memory_usage = size_of::<usize>() * 3 + 10 * size_of::<i8>();
         assert_eq!(vec.memory_usage(), expected_memory_usage);
     }
 
     #[test]
     fn test_alloc_vec_clone_empty() {
-        let original: AllocVec<i32> = AllocVec::new();
+        let original: AllocVec<u8> = AllocVec::new();
         let cloned = original.clone();
 
         // Cloned must have the same length and capacity
@@ -1443,7 +1480,7 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_clone() {
-        let mut original: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut original: AllocVec<u8> = AllocVec::with_capacity(10);
         original.push(1);
         original.push(2);
         original.push(3);
@@ -1468,7 +1505,7 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_clone_compact() {
-        let mut original: AllocVec<i32> = AllocVec::with_capacity(10);
+        let mut original: AllocVec<u8> = AllocVec::with_capacity(10);
         original.push(1);
         original.push(2);
         original.push(3);
@@ -1496,12 +1533,12 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_equality() {
-        let mut vec1: AllocVec<i32> = AllocVec::with_capacity(3);
+        let mut vec1: AllocVec<u8> = AllocVec::with_capacity(3);
         vec1.push(1);
         vec1.push(2);
         vec1.push(3);
 
-        let mut vec2: AllocVec<i32> = AllocVec::with_capacity(3);
+        let mut vec2: AllocVec<u8> = AllocVec::with_capacity(3);
         vec2.push(1);
         vec2.push(2);
         vec2.push(3);
@@ -1509,7 +1546,7 @@ mod tests {
         // Vectors with the same elements must be equal
         assert_eq!(vec1, vec2);
 
-        let mut vec3: AllocVec<i32> = AllocVec::with_capacity(3);
+        let mut vec3: AllocVec<u8> = AllocVec::with_capacity(3);
         vec3.push(4);
         vec3.push(5);
         vec3.push(6);
@@ -1517,7 +1554,7 @@ mod tests {
         // Vectors with different elements must not be equal
         assert_ne!(vec1, vec3);
 
-        let mut vec4: AllocVec<i32> = AllocVec::with_capacity(4);
+        let mut vec4: AllocVec<u8> = AllocVec::with_capacity(4);
         vec4.push(1);
         vec4.push(2);
         vec4.push(3);
@@ -1528,7 +1565,7 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_debug() {
-        let mut vec: AllocVec<i32> = AllocVec::new();
+        let mut vec: AllocVec<u8> = AllocVec::new();
         vec.push(1);
         vec.push(2);
         vec.push(3);
