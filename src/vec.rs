@@ -57,7 +57,10 @@ impl<T> AllocVec<T> {
     #[must_use]
     #[inline]
     pub(crate) fn new() -> Self {
+        // Check for ZSTs
         assert_ne!(size_of::<T>(), 0, "Zero-sized types are not allowed");
+
+        // New dangling vector
         AllocVec {
             ptr: NonNull::dangling(),
             cap: 0,
@@ -84,37 +87,64 @@ impl<T> AllocVec<T> {
         if cap == 0 {
             return Self::new();
         }
+
+        // Check for ZSTs
         assert_ne!(size_of::<T>(), 0, "Zero-sized types are not allowed");
-        let layout = Layout::array::<T>(cap).expect("Allocation error: capacity overflow");
 
-        let ptr = unsafe { alloc::alloc(layout) as *mut T };
-
-        let ptr = NonNull::new(ptr).expect("Allocation error: pointer is null");
-
+        // New allocated vector
         AllocVec {
-            ptr,
+            ptr: Self::allocate_layout(cap),
             cap,
             len: 0,
             _marker: PhantomData,
         }
     }
 
-    /// Allocates or reallocates the vector to a new capacity.
-    fn allocate(&mut self, new_cap: usize) {
-        let new_layout = Layout::array::<T>(new_cap).expect("Allocation error: capacity overflow");
-        let new_ptr = if self.cap == 0 {
-            // Allocate new memory space
-            unsafe { alloc::alloc(new_layout) as *mut T }
-        } else {
-            // Reallocate the memory space with the new capacity
-            let old_layout = Layout::array::<T>(self.cap).expect("Allocation error: layout error");
-            unsafe {
-                alloc::realloc(self.ptr.as_ptr() as *mut u8, old_layout, new_layout.size())
-                    as *mut T
-            }
+    /// Allocates memory space for the vector.
+    ///
+    /// # Returns
+    ///
+    /// - `NonNull<T>`: A non-null pointer to the allocated memory space.
+    ///
+    /// # Panics
+    ///
+    /// > - If the capacity overflows `isize::MAX` bytes.
+    /// > - If the allocation fails and the pointer is null.
+    fn allocate_layout(cap: usize) -> NonNull<T>{
+        // Create a layout for the allocation
+        let layout = Layout::array::<T>(cap).expect("Allocation error: capacity overflow");
+        // Allocate memory space
+        let raw_ptr = unsafe { alloc::alloc(layout) as *mut T };
+        // Return a non-null pointer
+        NonNull::new(raw_ptr).expect("Allocation error: pointer is null")
+    }
+
+    /// Allocates the vector to a new capacity.
+    ///
+    /// # Safety
+    ///
+    /// This method will allocate memory for the new capacity without dropping the old elements.
+    /// Calling this method without dropping the old elements will cause memory leaks.
+    #[inline(always)]
+    fn allocate(&mut self, cap: usize) {
+        self.ptr = Self::allocate_layout(cap);
+        self.cap = cap;
+    }
+
+    /// Reallocates the vector to a new capacity.
+    ///
+    /// # Safety
+    ///
+    /// This method is unsafe because it does not check if the pointer is dangling.
+    /// Calling this method with dangling pointer will cause termination with `SIGABRT`.
+    fn reallocate(&mut self, cap: usize) {
+        let old_layout = Layout::array::<T>(self.cap).expect("Allocation error: layout error");
+        let new_layout = Layout::array::<T>(cap).expect("Allocation error: capacity overflow");
+        let new_ptr = unsafe {
+            alloc::realloc(self.ptr.as_ptr() as *mut u8, old_layout, new_layout.size()) as *mut T
         };
         self.ptr = NonNull::new(new_ptr).expect("Allocation error: pointer is null");
-        self.cap = new_cap;
+        self.cap = cap;
     }
 
     /// Returns the capacity of the `AllocVec`.
@@ -142,17 +172,28 @@ impl<T> AllocVec<T> {
     /// Panics if the memory allocation fails due to capacity overflow.
     ///
     /// # Time Complexity
-    /// - _O_(n) where n is the new capacity.
+    ///
+    /// _O_(n) where n is the new capacity.
     ///
     #[inline]
     pub(crate) fn reserve(&mut self, additional: usize) {
-        // Check for arithmetic overflow
+        // New allocation.
+        if self.cap == 0 {
+            // This is safe because the vector is empty.
+            self.allocate(additional);
+            return;
+        }
+
+        // Check for arithmetic overflow.
         let new_cap = self
             .cap
             .checked_add(additional)
             .expect("Reservation error: arithmetic overflow");
+
+        // Reallocation.
         if new_cap > self.cap {
-            self.allocate(new_cap);
+            // This is safe because the pointer is not dangling.
+            self.reallocate(new_cap);
         }
     }
 
@@ -163,12 +204,14 @@ impl<T> AllocVec<T> {
     /// * `new_cap` - The new capacity of the `AllocVec`.
     ///
     /// # Time Complexity
-    /// - _O_(n) where n is the new capacity of the `AllocVec`.
+    ///
+    /// _O_(n) where n is the new capacity of the `AllocVec`.
     ///
     #[inline]
     pub(crate) fn shrink_to(&mut self, new_cap: usize) {
         if new_cap < self.cap && new_cap >= self.len {
-            self.allocate(new_cap);
+            // This is safe because the pointer is not dangling.
+            self.reallocate(new_cap);
         }
     }
 
@@ -183,12 +226,14 @@ impl<T> AllocVec<T> {
     /// This method will panic if the new layout for the reallocation cannot be created.
     ///
     /// # Time Complexity
-    /// - _O_(n) where n is the length of the `AllocVec`.
+    ///
+    /// _O_(n) where n is the length of the `AllocVec`.
     ///
     #[inline]
     pub(crate) fn shrink_to_fit(&mut self) {
         if self.cap > self.len {
-            self.allocate(self.len);
+            // This is safe because the pointer is not dangling
+            self.reallocate(self.len);
         }
     }
 
@@ -251,7 +296,7 @@ impl<T> AllocVec<T> {
     /// # Time Complexity
     ///
     /// - _O_(n) where n is the new length of the `AllocVec`.
-    pub fn truncate(&mut self, len: usize) {
+    pub(crate) fn truncate(&mut self, len: usize) {
         if len > self.len{
             return;
         }
@@ -881,6 +926,7 @@ mod tests {
     #[test]
     fn test_alloc_vec_new() {
         let alloc_vec: AllocVec<i32> = AllocVec::new();
+        assert_eq!(alloc_vec.ptr.as_ptr(), 0x4 as *mut i32);
         assert_eq!(alloc_vec.capacity(), 0);
         assert_eq!(alloc_vec.len(), 0);
     }
@@ -1149,7 +1195,15 @@ mod tests {
 
     #[test]
     fn test_alloc_vec_truncate() {
-        let mut alloc_vec: AllocVec<i8> = AllocVec::with_capacity(10);
+        let mut alloc_vec: AllocVec<i8> = AllocVec::new();
+
+        assert_eq!(alloc_vec.ptr.as_ptr(), 0x1 as *mut i8);
+
+        // Truncate prior to allocation (no effect)
+        alloc_vec.truncate(0);
+
+        // Allocate memory space for 3 elements
+        alloc_vec.reserve(3);
 
         assert_eq!(alloc_vec.len(), 0);
 
