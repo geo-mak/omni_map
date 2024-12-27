@@ -1110,23 +1110,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_create_map() {
-        let map: OmniMap<String, i32> = OmniMap::new();
+    fn test_map_new() {
+        let map: OmniMap<u8, &str> = OmniMap::new();
         assert!(map.is_empty());
         assert_eq!(map.len(), 0);
         assert_eq!(map.capacity(), 0);
     }
 
     #[test]
-    fn test_create_map_with_capacity() {
-        let map: OmniMap<String, i32> = OmniMap::with_capacity(10);
+    fn test_map_new_with_capacity() {
+        let map: OmniMap<u8, &str> = OmniMap::with_capacity(10);
         assert!(map.is_empty());
         assert_eq!(map.len(), 0);
         assert_eq!(map.capacity(), 10);
     }
 
     #[test]
-    fn test_omni_map_new_with_zst_ok() {
+    fn test_map_new_with_zst_ok() {
         // Zero-sized types
         let map: OmniMap<(), ()> = OmniMap::new(); // Must be Ok
         assert_eq!(map.len(), 0);
@@ -1134,7 +1134,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_factor() {
+    fn test_map_load_factor() {
         // New map with zero capacity
         let mut map = OmniMap::new();
         assert_eq!(map.load_factor(), 0.0); // Empty map
@@ -1156,8 +1156,8 @@ mod tests {
     }
 
     #[test]
-    fn test_create_map_default() {
-        let map: OmniMap<String, i32> = OmniMap::default();
+    fn test_map_new_default() {
+        let map: OmniMap<u8, &str> = OmniMap::default();
         assert!(map.is_empty());
         assert_eq!(map.len(), 0);
         assert_eq!(map.capacity(), 16);
@@ -1167,20 +1167,20 @@ mod tests {
     fn test_map_insert_get() {
         let mut map = OmniMap::new();
 
-        // Insert a key-value pair.
-        // Must return None because the keys did not exist.
+        // Insert
         assert_eq!(map.insert(1, 2), None);
         assert_eq!(map.insert(2, 3), None);
+        assert_eq!(map.insert(3, 4), None);
 
-        // Length must be 2.
-        assert_eq!(map.len(), 2);
+        // Map state
+        assert!(!map.is_empty());
+        assert_eq!(map.len(), 3);
+        assert_eq!(map.capacity(), 4);
 
-        // Get the values.
+        // Check values
         assert_eq!(map.get(&1), Some(&2));
         assert_eq!(map.get(&2), Some(&3));
-
-        // Get nonexistent key.
-        assert_eq!(map.get(&3), None);
+        assert_eq!(map.get(&3), Some(&4));
     }
 
     #[test]
@@ -1188,24 +1188,24 @@ mod tests {
         let mut map = OmniMap::new();
 
         // Insert a key-value pair
-        assert_eq!(map.insert(1, 2), None);
-        assert_eq!(map.get(&1), Some(&2));
+        map.insert(1, 2);
+        map.insert(2, 3);
+        map.insert(3, 4);
 
-        // Update the value for the same key
+        // Update the value for keys 1 and 2
         assert_eq!(map.insert(1, 22), Some(2));
-        assert_eq!(map.get(&1), Some(&22));
-
-        // Insert another key-value pair
-        assert_eq!(map.insert(2, 3), None);
-        assert_eq!(map.get(&2), Some(&3));
-
-        // Update the value for the second key
         assert_eq!(map.insert(2, 33), Some(3));
+
+        // Values must be updated
+        assert_eq!(map.get(&1), Some(&22));
         assert_eq!(map.get(&2), Some(&33));
+
+        // Key 3 must remain the same
+        assert_eq!(map.get(&3), Some(&4));
     }
 
     #[test]
-    fn test_map_get_mut() {
+    fn test_map_access_get_mut() {
         let mut map = OmniMap::new();
 
         map.insert(1, 1);
@@ -1255,7 +1255,7 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "Index out of bounds")]
-    fn test_map_index_out_of_bounds() {
+    fn test_map_access_index_out_of_bounds() {
         let mut map = OmniMap::new();
         map.insert(1, 1);
 
@@ -1267,20 +1267,7 @@ mod tests {
     }
 
     #[test]
-    fn test_map_insertion_order() {
-        let mut map = OmniMap::new();
-        map.insert(1, 1);
-        map.insert(2, 2);
-        map.insert(3, 3);
-
-        assert_eq!(
-            map.iter().collect::<Vec<(&i32, &i32)>>(),
-            vec![(&1, &1), (&2, &2), (&3, &3)]
-        );
-    }
-
-    #[test]
-    fn test_map_get_first() {
+    fn test_map_access_get_first() {
         let mut map = OmniMap::new();
         map.insert(1, 1);
         map.insert(2, 2);
@@ -1290,7 +1277,7 @@ mod tests {
     }
 
     #[test]
-    fn test_map_get_last() {
+    fn test_map_access_get_last() {
         let mut map = OmniMap::new();
         map.insert(1, 1);
         map.insert(2, 2);
@@ -1302,56 +1289,93 @@ mod tests {
     #[test]
     fn test_map_pop_front() {
         let mut map = OmniMap::new();
-        map.insert(1, 1); // First key
-        map.insert(2, 2);
-        map.insert(3, 3);
+
+        // Insert 3 items
+        map.insert(1, 2); // First key
+        map.insert(2, 3);
+        map.insert(3, 4);
 
         assert_eq!(map.len(), 3);
 
-        assert_eq!(map.pop_front(), Some((1, 1)));
+        // Pop the first item
+        assert_eq!(map.pop_front(), Some((1, 2)));
 
         assert_eq!(map.len(), 2);
-        assert_eq!(map.get(&1), None);
 
-        // First key now must be the second key (key 2)
-        assert_eq!(map.first(), Some((&2, &2)));
+        assert_eq!(map.get(&1), None);
+        assert_eq!(map.get(&2), Some(&3));
+        assert_eq!(map.get(&3), Some(&4));
     }
 
     #[test]
     fn test_map_pop() {
         let mut map = OmniMap::new();
-        map.insert(1, 1);
-        map.insert(2, 2);
-        map.insert(3, 3); // Last key
+
+        // Insert 3 items
+        map.insert(1, 2);
+        map.insert(2, 3);
+        map.insert(3, 4); // Last key
 
         assert_eq!(map.len(), 3);
 
         let removed_item = map.pop();
 
-        assert_eq!(removed_item, Some((3, 3)));
+        assert_eq!(removed_item, Some((3, 4)));
 
         assert_eq!(map.len(), 2);
 
+        assert_eq!(map.get(&1), Some(&2));
+        assert_eq!(map.get(&2), Some(&3));
         assert_eq!(map.get(&3), None);
-
-        // Last key now must be the second key
-        assert_eq!(map.last(), Some((&2, &2)));
     }
 
     #[test]
     fn test_map_remove_existing_key() {
         let mut map = OmniMap::new();
-        map.insert(1, 1);
-        map.insert(2, 2);
+
+        // Insert 4 items
+        map.insert(1, 2);
+        map.insert(2, 3);
+        map.insert(3, 4);
+
+        assert_eq!(map.len(), 3);
+
+        assert_eq!(map.remove(&1), Some(2));
 
         assert_eq!(map.len(), 2);
 
-        assert_eq!(map.remove(&1), Some(1));
-
-        assert_eq!(map.len(), 1);
-
         assert_eq!(map.get(&1), None);
-        assert_eq!(map.get(&2), Some(&2));
+        assert_eq!(map.get(&2), Some(&3));
+        assert_eq!(map.get(&3), Some(&4));
+    }
+
+    #[test]
+    fn test_map_remove_preserve_order() {
+        let mut map = OmniMap::new();
+
+        // Insert 4 items
+        map.insert(1, 2);
+        map.insert(2, 3);
+        map.insert(3, 4);
+        map.insert(4, 5);
+
+        assert_eq!(map.len(), 4);
+
+        // Remove the second item (key "2")
+        assert_eq!(map.remove(&2), Some(3));
+
+        assert_eq!(map.len(), 3);
+
+        // Check the order of the remaining items
+        assert_eq!(
+            map.iter().collect::<Vec<(&u8, &u8)>>(),
+            vec![(&1, &2), (&3, &4), (&4, &5)]
+        );
+
+        // Order of the keys must be preserved, but index has been updated
+        assert_eq!(map[0], 2);
+        assert_eq!(map[1], 4);
+        assert_eq!(map[2], 5);
     }
 
     #[test]
@@ -1367,33 +1391,6 @@ mod tests {
         assert_eq!(map.len(), 1);
 
         assert_eq!(map.get(&1), Some(&1));
-    }
-
-    #[test]
-    fn test_map_remove_preserve_order() {
-        let mut map = OmniMap::new();
-
-        // Insert 4 items
-        map.insert(1, 1);
-        map.insert(2, 2);
-        map.insert(3, 3);
-        map.insert(4, 4);
-
-        assert_eq!(map.len(), 4);
-
-        // Remove the second item (key "2")
-        assert_eq!(map.remove(&2), Some(2));
-
-        assert_eq!(map.len(), 3);
-
-        // Check the order of the remaining items
-        assert_eq!(
-            map.iter().collect::<Vec<(&i32, &i32)>>(),
-            vec![(&1, &1), (&3, &3), (&4, &4)]
-        );
-
-        // Order of the keys must be preserved, but index has been updated
-        assert_eq!(map[0], 1);
     }
 
     #[test]
@@ -1430,14 +1427,14 @@ mod tests {
         // Reserve capacity in advance
         map.reserve(10);
 
-        // Capacity must be 11
+        // Capacity must be 1 + requested capacity = 11
         assert_eq!(map.capacity(), 11);
 
         assert_eq!(map.get(&1), Some(&1));
     }
 
     #[test]
-    fn test_map_capacity_shrink() {
+    fn test_map_capacity_shrink_to_fit() {
         let mut map = OmniMap::new();
         assert_eq!(map.capacity(), 0);
 
@@ -1447,7 +1444,9 @@ mod tests {
 
         assert_eq!(map.capacity(), 16);
 
+        // Shrink the capacity to the current length
         map.shrink_to_fit();
+
         assert_eq!(map.len(), 10);
         assert_eq!(map.capacity(), 10);
 
@@ -1455,33 +1454,46 @@ mod tests {
         for i in 0..10 {
             assert_eq!(map.get(&i), Some(&i));
         }
+    }
 
-        // Insert 5 more elements
-        for i in 10..15 {
+    #[test]
+    fn test_map_capacity_shrink_to() {
+        let mut map = OmniMap::new();
+        assert_eq!(map.capacity(), 0);
+
+        for i in 0..10 {
             map.insert(i, i);
         }
 
-        assert_eq!(map.len(), 15);
-        assert_eq!(map.capacity(), 32);
+        assert_eq!(map.len(), 10);
+        assert_eq!(map.capacity(), 16);
 
-        // Shrink and reserve less than the current length
-        map.shrink_to(10);
-        assert_eq!(map.len(), 15);
-        assert_eq!(map.capacity(), 32); // Capacity must stay 32
+        // Shrink and reserve less than the current length (no effect)
+        map.shrink_to(5);
 
-        // Shrink and reserve greater than the current length
+        assert_eq!(map.len(), 10);
+        assert_eq!(map.capacity(), 16); // Capacity must stay 16
+
+        // Shrink and reserve greater than the current capacity (no effect)
         map.shrink_to(20);
-        assert_eq!(map.len(), 15);
-        assert_eq!(map.capacity(), 20); // Capacity must be adjusted to 20
+
+        assert_eq!(map.len(), 10);
+        assert_eq!(map.capacity(), 16); // Capacity must be adjusted to 16
+
+        // Shrink and reserve less than the current capacity and greater than the current length
+        map.shrink_to(12);
+
+        assert_eq!(map.len(), 10);
+        assert_eq!(map.capacity(), 12); // Capacity must be adjusted to 12
 
         // All elements are accessible
-        for i in 0..15 {
+        for i in 0..10 {
             assert_eq!(map.get(&i), Some(&i));
         }
     }
 
     #[test]
-    fn test_into_iter_ordered() {
+    fn test_map_into_iter_order() {
         let mut map = OmniMap::new();
         map.insert(1, 1);
         map.insert(2, 2);
@@ -1526,13 +1538,13 @@ mod tests {
     }
 
     #[test]
-    fn test_into_iterator_consumes_map() {
+    fn test_map_into_iter_consume() {
         let mut map = OmniMap::new();
         map.insert(1, 2);
         map.insert(2, 3);
         map.insert(3, 4);
 
-        let mut iter: OmniMapIntoIter<i32, i32> = map.into_iter();
+        let mut iter: OmniMapIntoIter<u8, u8> = map.into_iter();
 
         assert_eq!(iter.next(), Some((1, 2)));
         assert_eq!(iter.next(), Some((2, 3)));
@@ -1592,51 +1604,47 @@ mod tests {
 
     #[test]
     fn test_map_index_integrity() {
-        let mut map: OmniMap<i32, i32> = OmniMap::new();
-        for i in 0..100 {
+        // Empty map
+        let mut map: OmniMap<u8, u8> = OmniMap::with_capacity(50);
+        assert!(map.index.iter().all(|slot| matches!(slot, Slot::Empty)));
+
+        // Full capacity
+        for i in 0..50 {
             map.insert(i, i);
         }
 
-        for i in 0..50 {
+        map.shrink_to_fit();
+        assert!(map.index.iter().all(|slot| matches!(slot, Slot::Occupied(_))));
+
+        // Sequential insertions and deletions
+        for i in 0..25 {
             map.remove(&i);
         }
 
-        // Check that the count of 'Deleted' values in index is equal to the number of deleted entries
-        let deleted_count = map
-            .index
-            .iter()
-            .filter(|&slot| matches!(slot, Slot::Deleted))
-            .count();
-
-        assert_eq!(
-            deleted_count, 50,
-            "Count of 'Deleted' slots in index does not match the number of deleted entries"
-        );
-
-        // Check that the count of 'Occupied' values in index is equal to the length of the map
-        let occupied_count = map
-            .index
-            .iter()
-            .filter(|&slot| matches!(slot, Slot::Occupied(_)))
-            .count();
-
-        assert_eq!(
-            occupied_count,
-            map.len(),
-            "Count of 'Occupied' slots in index does not match the length of the map"
-        );
-
-        // Check for duplicate indices
-        let mut indices = std::collections::HashSet::new();
+        let mut occupied_indices = std::collections::HashSet::new();
+        let mut deleted_indices = 0;
+        let mut empty_indices = 0;
         for slot in map.index.iter() {
-            if let Slot::Occupied(index) = slot {
-                assert!(indices.insert(index), "Duplicate index found: {}", index);
+            match slot {
+                Slot::Occupied(index) => {
+                    assert!(occupied_indices.insert(index), "Duplicate index found: {}", index);
+                }
+                Slot::Deleted => {
+                    deleted_indices += 1;
+                }
+                Slot::Empty => {
+                    empty_indices += 1;
+                }
             }
         }
+
+        assert_eq!(occupied_indices.len(), 25);
+        assert_eq!(deleted_indices, 25);
+        assert_eq!(empty_indices, map.capacity() as u8 - (occupied_indices.len() as u8 + deleted_indices));
     }
 
     #[test]
-    fn test_omni_map_debug() {
+    fn test_map_debug() {
         let mut map = OmniMap::with_capacity(3);
         map.insert(1, "a");
         map.insert(2, "b");
