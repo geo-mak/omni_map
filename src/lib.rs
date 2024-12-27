@@ -233,12 +233,11 @@ where
     /// This method should be called **only** after resetting the index with a new capacity.
     fn build_index(&mut self) {
         let capacity = self.index.capacity();
+
         // NOTE: This must be ensured by the calling contexts, because calling this method is only
         // needed after shrinking or growing the capacity of the index.
-        debug_assert!(
-            capacity == self.entries.capacity(),
-            "Logic error: capacity of the index must be equal to the capacity of the entries."
-        );
+        debug_assert_eq!(capacity, self.entries.capacity());
+
         // Build the index of the current entries.
         for (index, entry) in self.entries.iter().enumerate() {
             let mut slot = entry.hash % capacity;
@@ -289,8 +288,6 @@ where
         self.entries.reserve(additional);
         // Reset the index with the new capacity.
         self.index = AllocVec::with_capacity_and_populate(additional + self.index.capacity());
-        // Entries and indices vectors must maintain the same capacity.
-        debug_assert_eq!(self.entries.capacity(), self.index.capacity());
         // Rebuild the index with the new capacity.
         self.build_index();
     }
@@ -764,8 +761,6 @@ where
             self.entries.shrink_to(capacity);
             // Reset the index with the new capacity.
             self.index = AllocVec::with_capacity_and_populate(capacity);
-            // Entries and indices vectors must maintain the same capacity.
-            debug_assert_eq!(self.entries.capacity(), self.index.capacity());
             // Rebuild the index with the new capacity
             self.build_index();
         }
@@ -804,8 +799,6 @@ where
             self.entries.shrink_to_fit();
             // Reset the index with the new capacity.
             self.index = AllocVec::with_capacity_and_populate(self.entries.len());
-            // Entries and indices vectors must maintain the same capacity.
-            debug_assert_eq!(self.entries.capacity(), self.index.capacity());
             // Rebuild the index with the new capacity
             self.build_index();
         }
