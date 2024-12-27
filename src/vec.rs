@@ -79,6 +79,7 @@ impl<T> AllocVec<T> {
     /// # Panics
     ///
     /// - If the type `T` is a zero-sized type.
+    ///
     /// - If the memory allocation fails.
     ///
     #[must_use]
@@ -109,6 +110,7 @@ impl<T> AllocVec<T> {
     /// # Panics
     ///
     /// - If the capacity overflows `isize::MAX` bytes.
+    ///
     /// - If the allocation fails and the pointer is null.
     ///
     fn allocate_layout(cap: usize) -> NonNull<T>{
@@ -213,7 +215,7 @@ impl<T> AllocVec<T> {
     ///
     /// # Arguments
     ///
-    /// * `new_cap` - The new capacity of the `AllocVec`.
+    /// - `new_cap` - The new capacity of the `AllocVec`.
     ///
     /// # Time Complexity
     ///
@@ -269,6 +271,7 @@ impl<T> AllocVec<T> {
     /// # Arguments
     ///
     /// - `new_len` - The new length of the `AllocVec`.
+    ///
     /// - `f` - The function to generate new elements.
     ///
     /// # Time Complexity
@@ -365,6 +368,7 @@ impl<T> AllocVec<T> {
     /// # Returns
     ///
     /// - `Ok(())` if the element was successfully appended.
+    ///
     /// - `Err(value)` if the `AllocVec` is at full capacity.
     ///
     /// # Time Complexity
@@ -528,6 +532,7 @@ impl<T> AllocVec<T> {
     /// # Arguments
     ///
     /// - `index` - The index of the element to replace.
+    ///
     /// - `new_value` - The new value to replace the old value with.
     ///
     /// # Panics
@@ -552,6 +557,7 @@ impl<T> AllocVec<T> {
     /// # Arguments
     ///
     /// - `index1` - The first index.
+    ///
     /// - `index2` - The second index.
     ///
     /// # Panics
@@ -583,6 +589,7 @@ impl<T> AllocVec<T> {
     /// Panics if `chunk_size` is 0.
     ///
     /// # Time Complexity
+    ///
     /// _O_(1).
     ///
     #[inline]
@@ -775,6 +782,7 @@ impl<T: Default> AllocVec<T> {
     /// # Panics
     ///
     /// - If the type `T` is a zero-sized type.
+    ///
     /// - If the memory allocation fails.
     ///
     #[must_use]

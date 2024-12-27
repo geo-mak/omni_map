@@ -95,6 +95,7 @@ where
     /// Creates a new `OmniMap` with the specified capacity.
     ///
     /// # Parameters
+    ///
     /// - `capacity`: The initial capacity of the map.
     ///
     /// # Examples
@@ -195,6 +196,7 @@ where
     /// # Returns
     ///
     /// - `(slot, Some(index))`: If the slot is occupied and the keys match.
+    ///
     /// - `(slot, None)`: If the slot is empty or no key match is found.
     ///   The returned slot is the last checked slot before the search ends.
     ///
@@ -319,9 +321,11 @@ where
     /// The resulting capacity will be equal to `self.capacity() + additional` exactly.
     ///
     /// # Time Complexity
-    /// - _O_(n) on average, where *n* is the number of elements in the map.
+    ///
+    /// _O_(n) on average, where *n* is the number of elements in the map.
     ///
     /// # Parameters
+    ///
     /// - `additional`: The number of additional elements to reserve space for.
     ///
     /// # Examples
@@ -348,7 +352,7 @@ where
     }
 
     /// This method will grow the capacity of the map if the current load exceeds the load factor.
-    // If the capacity is zero, it will allocate the initial capacity without reindexing
+    /// If the capacity is zero, it will allocate the initial capacity without reindexing.
     #[inline(always)]
     fn ensure_capacity(&mut self) {
         // Ensure that the map has enough capacity to insert the new key-value pair.
@@ -367,13 +371,17 @@ where
     /// If the map did have this key present, the value is updated, and the old value is returned.
     ///
     /// # Parameters
+    ///
     /// - `key`: The key to insert or update.
+    ///
     /// - `value`: The value to associate with the key.
     ///
     /// # Time Complexity
-    /// - Amortized _O_(1).
+    ///
+    /// Amortized _O_(1).
     ///
     /// # Examples
+    ///
     /// ```
     /// use omni_map::OmniMap;
     ///
@@ -416,8 +424,6 @@ where
                 // replaced with an occupied slot without extra checking.
                 // The capacity-management strategy ensures that the index has empty slots,
                 // otherwise the method will return the last checked slot before the search ends.
-
-                // The slot must be an empty slot
                 debug_assert!(
                     matches!(self.index[slot_index], Slot::Empty),
                     "Logic error: slot is expected to an empty slot."
@@ -435,15 +441,19 @@ where
     /// Retrieves a value by its key.
     ///
     /// # Parameters
+    ///
     /// - `key`: The key for which to retrieve the value.
     ///
     /// # Returns
+    ///
     /// An `Option` containing the value if the key is found, or `None` if the key does not exist.
     ///
     /// # Time Complexity
-    /// - _O_(1) on average.
+    ///
+    /// _O_(1) on average.
     ///
     /// # Examples
+    ///
     /// ```
     /// use omni_map::OmniMap;
     ///
@@ -469,15 +479,19 @@ where
     /// Retrieves a mutable reference to a value by its key.
     ///
     /// # Parameters
+    ///
     /// - `key`: The key for which to retrieve the mutable reference to the value.
     ///
     /// # Returns
+    ///
     /// An `Option` containing a mutable reference to the value if the key is found, or `None` if the key does not exist.
     ///
     /// # Time Complexity
-    /// - _O_(1) on average.
+    ///
+    /// _O_(1) on average.
     ///
     /// # Examples
+    ///
     /// ```
     /// use omni_map::OmniMap;
     ///
@@ -507,12 +521,15 @@ where
     /// Returns the first entry in the map.
     ///
     /// # Returns
+    ///
     /// An `Option` containing the key-value pair of the first inserted entry if the map is not empty.
     ///
     /// # Time Complexity
-    /// - _O_(1).
+    ///
+    /// _O_(1).
     ///
     /// # Examples
+    ///
     /// ```
     /// use omni_map::OmniMap;
     ///
@@ -537,12 +554,15 @@ where
     /// Returns the last entry in the map.
     ///
     /// # Returns
+    ///
     /// An `Option` containing the key-value pair of the last inserted entry if the map is not empty.
     ///
     /// # Time Complexity
-    /// - _O_(1).
+    ///
+    /// _O_(1).
     ///
     /// # Examples
+    ///
     /// ```
     /// use omni_map::OmniMap;
     ///
@@ -567,19 +587,25 @@ where
     /// Removes an entry by its key.
     ///
     /// # Parameters
+    ///
     /// - `key`: The key to remove.
     ///
     /// # Returns
-    /// `true` if the key was found and removed, `false` otherwise.
+    ///
+    /// An `Option` containing the value of the removed entry if the key exists,
+    /// or `None` if the key does not exist.
     ///
     /// # Time Complexity
+    ///
     /// - _O_(n) in the worst case.
+    ///
     /// - _O_(1) if the entry is the last entry.
     ///
     /// # Note
     /// This method does not shrink the current capacity of the map.
     ///
     /// # Examples
+    ///
     /// ```
     /// use omni_map::OmniMap;
     ///
@@ -626,17 +652,18 @@ where
     }
 
     /// Pops the first entry from the map.
+    /// The capacity of the map remains unchanged.
     ///
     /// # Returns
+    ///
     /// An `Option` containing the key-value pair if the map is not empty.
     ///
     /// # Time Complexity
-    /// - _O_(n) in the worst case.
     ///
-    /// # Note
-    /// This method does not shrink the current capacity of the map.
+    /// _O_(n) in the worst case.
     ///
     /// # Examples
+    ///
     /// ```
     /// use omni_map::OmniMap;
     ///
@@ -660,17 +687,18 @@ where
     }
 
     /// Pops the last entry from the map.
+    /// The capacity of the map remains unchanged.
     ///
     /// # Returns
+    ///
     /// An `Option` containing the key-value pair if the map is not empty.
     ///
     /// # Time Complexity
-    /// - _O_(1) on average.
     ///
-    /// # Note
-    /// This method does not shrink the current capacity of the map.
+    /// _O_(1) on average.
     ///
     /// # Examples
+    ///
     /// ```
     /// use omni_map::OmniMap;
     ///
@@ -702,15 +730,15 @@ where
     /// and greater than or equal to the number of elements in the map.
     ///
     /// # Parameters
+    ///
     /// - `capacity`: The new capacity of the map.
     ///
-    /// # Note
-    /// This method will reindex the map after shrinking.
-    ///
     /// # Time Complexity
-    /// - _O_(n) on average, where *n* is the number of elements in the map.
+    ///
+    /// _O_(n) on average, where *n* is the number of elements in the map.
     ///
     /// # Examples
+    ///
     /// ```
     /// use omni_map::OmniMap;
     ///
@@ -746,13 +774,12 @@ where
     /// Shrinks the capacity of the `OmniMap` to fit its current length.
     /// If the capacity is equal to the number of elements in the map, this method will do nothing.
     ///
-    /// # Note
-    /// This method will reindex the map after shrinking.
-    ///
     /// # Time Complexity
-    /// - _O_(n) on average, where *n* is the number of elements in the map.
+    ///
+    /// _O_(n) on average, where *n* is the number of elements in the map.
     ///
     /// # Examples
+    ///
     /// ```
     /// use omni_map::OmniMap;
     ///
@@ -785,14 +812,14 @@ where
     }
 
     /// Clears the map, removing all key-value pairs.
-    ///
-    /// # Note
-    /// This method does not shrink the current capacity of the map.
+    /// The capacity of the map remains unchanged.
     ///
     /// # Time Complexity
-    /// - _O_(n).
+    ///
+    /// _O_(n).
     ///
     /// # Examples
+    ///
     /// ```
     /// use omni_map::OmniMap;
     ///
@@ -922,6 +949,7 @@ where
     /// The default capacity is set to `16`.
     ///
     /// # Examples
+    ///
     /// ```
     /// use omni_map::OmniMap;
     ///
@@ -942,15 +970,19 @@ impl<K, V> Index<usize> for OmniMap<K, V> {
     /// Returns immutable reference to the value at the specified index.
     ///
     /// # Parameters
+    ///
     /// - `index`: The index of the value to retrieve.
     ///
     /// # Returns
+    ///
     /// A reference to the value at the specified index.
     ///
     /// # Panics
-    /// - if the index is out of bounds.
+    ///
+    /// If the index is out of bounds.
     ///
     /// # Examples
+    ///
     /// ```
     /// use omni_map::OmniMap;
     ///
@@ -972,15 +1004,19 @@ impl<K, V> IndexMut<usize> for OmniMap<K, V> {
     /// Returns mutable reference to the value at the specified index.
     ///
     /// # Parameters
+    ///
     /// - `index`: The index of the value to retrieve.
     ///
     /// # Returns
+    ///
     /// A mutable reference to the value at the specified index.
     ///
     /// # Panics
-    /// - if the index is out of bounds.
+    ///
+    /// If the index is out of bounds.
     ///
     /// # Examples
+    ///
     /// ```
     /// use omni_map::OmniMap;
     ///
@@ -1043,6 +1079,7 @@ impl<K, V> IntoIterator for OmniMap<K, V> {
     /// Consumes the `OmniMap` and returns an iterator over its key-value pairs.
     ///
     /// # Returns
+    ///
     /// An iterator that yields key-value pairs in the order they were inserted.
     ///
     /// # Examples
@@ -1103,6 +1140,7 @@ where
     /// memory usage if the map has a lot of unused capacity.
     ///
     /// # Returns
+    ///
     /// A new `OmniMap` instance with the same elements as the original, but with a
     /// capacity equal to the number of elements.
     ///
