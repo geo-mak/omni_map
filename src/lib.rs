@@ -61,6 +61,7 @@ pub struct OmniMap<K, V> {
     // Both Entry and Slot are guaranteed not to be zero-sized.
     entries: AllocVec<Entry<K, V>>,
     index: AllocVec<Slot>,
+    deleted: usize,
 }
 
 // Core implementation
@@ -89,6 +90,7 @@ where
             // Empty vectors with dangling pointers
             entries: AllocVec::new(),
             index: AllocVec::new(),
+            deleted: 0,
         }
     }
 
@@ -116,6 +118,7 @@ where
             entries: AllocVec::with_capacity(capacity),
             // Initialize the index with empty slots by calling T::default()
             index: AllocVec::with_capacity_and_populate(capacity),
+            deleted: 0,
         }
     }
 
@@ -229,6 +232,13 @@ where
         (slot, None)
     }
 
+    /// Resets the index of the map with a new capacity.
+    #[inline(always)]
+    fn reset_index(&mut self, cap: usize) {
+        self.index = AllocVec::with_capacity_and_populate(cap);
+        self.deleted = 0;
+    }
+
     /// Builds the index of the map according to the current entries and the capacity of the index.
     /// This method should be called **only** after resetting the index with a new capacity.
     fn build_index(&mut self) {
@@ -287,7 +297,7 @@ where
         // the vector will not reallocate. So this call is safe even if the capacity is zero.
         self.entries.reserve(additional);
         // Reset the index with the new capacity.
-        self.index = AllocVec::with_capacity_and_populate(additional + self.index.capacity());
+        self.reset_index(self.entries.capacity());
         // Rebuild the index with the new capacity.
         self.build_index();
     }
@@ -296,8 +306,7 @@ where
     fn maybe_grow(&mut self) {
         let current_cap = self.index.capacity();
 
-        // Load factor = number of entries / capacity (the actual capacity of the index)
-        let load_factor = self.entries.len() as f64 / current_cap as f64;
+        let load_factor = (self.entries.len() + self.deleted) as f64 / current_cap as f64;
 
         // If the current load exceeds the load factor, grow the capacity.
         if load_factor > Self::LOAD_FACTOR {
@@ -642,6 +651,9 @@ where
                 self.decrement_index(index);
             }
 
+            // Add the deleted slot to the deleted counter
+            self.deleted += 1;
+
             // Return the value of the removed entry
             return Some(entry.value);
         }
@@ -680,6 +692,8 @@ where
         // This is safe because the map is not empty
         let entry = self.entries.pop_front();
         self.decrement_index(0);
+        // Add the deleted slot to the deleted counter
+        self.deleted += 1;
         Some((entry.key, entry.value))
     }
 
@@ -717,6 +731,8 @@ where
             self.index[slot] = Slot::Deleted;
             // This is safe because the map is not empty
             let entry = self.entries.pop();
+            // Add the deleted slot to the deleted counter
+            self.deleted += 1;
             return Some((entry.key, entry.value));
         }
         None
@@ -760,7 +776,7 @@ where
             // capacity and greater than or equal to the number of elements
             self.entries.shrink_to(capacity);
             // Reset the index with the new capacity.
-            self.index = AllocVec::with_capacity_and_populate(capacity);
+            self.reset_index(capacity);
             // Rebuild the index with the new capacity
             self.build_index();
         }
@@ -798,7 +814,7 @@ where
             // NOTE: This call is no-op if the capacity is not larger than the length.
             self.entries.shrink_to_fit();
             // Reset the index with the new capacity.
-            self.index = AllocVec::with_capacity_and_populate(self.entries.len());
+            self.reset_index(self.entries.len());
             // Rebuild the index with the new capacity
             self.build_index();
         }
@@ -832,7 +848,7 @@ where
             return;
         }
         self.entries.clear();
-        self.index = AllocVec::with_capacity_and_populate(self.index.capacity());
+        self.reset_index(self.index.capacity());
     }
 
     /// Returns an iterator over the key-value pairs in the `OmniMap`.
@@ -924,13 +940,13 @@ where
         if self.index.capacity() == 0 {
             return 0.0;
         }
-        self.entries.len() as f64 / self.index.capacity() as f64
+        (self.entries.len() + self.deleted) as f64 / self.index.capacity() as f64
     }
 
     /// Returns the current memory usage of the `OmniMap` in bytes.
     #[inline]
     pub fn memory_usage(&self) -> usize {
-        self.entries.memory_usage() + self.index.memory_usage()
+        self.entries.memory_usage() + self.index.memory_usage() + size_of::<usize>()
     }
 }
 
@@ -1117,6 +1133,7 @@ where
         OmniMap {
             entries: self.entries.clone(),
             index: self.index.clone(),
+            deleted: self.deleted,
         }
     }
 }
@@ -1161,6 +1178,7 @@ where
             // NOTE: Index can't be compacted because it's length is equal to the capacity,
             // so we allocate a new index with capacity equal to the number of elements.
             index: AllocVec::with_capacity_and_populate(self.entries.len()),
+            deleted: 0,
         };
         clone.build_index();
         clone
@@ -1201,6 +1219,7 @@ mod tests {
 
         assert!(map.is_empty());
         assert_eq!(map.len(), 0);
+        assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 0);
     }
 
@@ -1210,6 +1229,7 @@ mod tests {
 
         assert!(map.is_empty());
         assert_eq!(map.len(), 0);
+        assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 10);
     }
 
@@ -1219,6 +1239,7 @@ mod tests {
         let map: OmniMap<(), ()> = OmniMap::new(); // Must be Ok
 
         assert_eq!(map.len(), 0);
+        assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 0);
     }
 
@@ -1251,6 +1272,7 @@ mod tests {
 
         assert!(map.is_empty());
         assert_eq!(map.len(), 0);
+        assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 16);
     }
 
@@ -1266,6 +1288,7 @@ mod tests {
         // Map state
         assert!(!map.is_empty());
         assert_eq!(map.len(), 3);
+        assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 4);
 
         // Check values
@@ -1392,12 +1415,14 @@ mod tests {
         map.insert(3, 4);
 
         assert_eq!(map.len(), 3);
+        assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 4);
 
         // Pop the first item
         assert_eq!(map.pop_front(), Some((1, 2)));
 
         assert_eq!(map.len(), 2);
+        assert_eq!(map.deleted, 1);
         assert_eq!(map.capacity(), 4);
 
         // Access by get to the remaining items
@@ -1416,6 +1441,7 @@ mod tests {
         map.insert(3, 4); // Last key
 
         assert_eq!(map.len(), 3);
+        assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 4);
 
         let removed_item = map.pop();
@@ -1423,6 +1449,7 @@ mod tests {
         assert_eq!(removed_item, Some((3, 4)));
 
         assert_eq!(map.len(), 2);
+        assert_eq!(map.deleted, 1);
         assert_eq!(map.capacity(), 4);
 
         // Access by get to the remaining items
@@ -1441,11 +1468,13 @@ mod tests {
         map.insert(3, 4);
 
         assert_eq!(map.len(), 3);
+        assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 4);
 
         assert_eq!(map.remove(&1), Some(2));
 
         assert_eq!(map.len(), 2);
+        assert_eq!(map.deleted, 1);
         assert_eq!(map.capacity(), 4);
 
         // Access by get to the remaining items
@@ -1465,11 +1494,13 @@ mod tests {
         map.insert(4, 5);
 
         assert_eq!(map.len(), 4);
+        assert_eq!(map.deleted, 0);
 
         // Remove the second item (key "2")
         assert_eq!(map.remove(&2), Some(3));
 
         assert_eq!(map.len(), 3);
+        assert_eq!(map.deleted, 1);
         assert_eq!(map.capacity(), 4);
 
         // Check the order of the remaining items
@@ -1491,12 +1522,14 @@ mod tests {
         map.insert(1, 1);
 
         assert_eq!(map.len(), 1);
+        assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 1);
 
         // Must return None, because the key does not exist
         assert_eq!(map.remove(&2), None);
 
         assert_eq!(map.len(), 1);
+        assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 1);
 
         assert_eq!(map.get(&1), Some(&1));
@@ -1506,18 +1539,29 @@ mod tests {
     fn test_map_clear() {
         let mut map = OmniMap::with_capacity(4);
 
-        map.insert(1, 1);
+        map.insert(1, 2);
+        map.insert(2, 3);
+        map.insert(3, 4);
 
-        assert_eq!(map.len(), 1);
+        assert_eq!(map.len(), 3);
+        assert_eq!(map.deleted, 0);
+        assert_eq!(map.capacity(), 4);
+
+        // Remove an item
+        map.remove(&1);
+
+        assert_eq!(map.len(), 2);
+        assert_eq!(map.deleted, 1);
         assert_eq!(map.capacity(), 4);
 
         // Clear the map
         map.clear();
 
         assert_eq!(map.len(), 0);
+        assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 4);
 
-        // Insert
+        // Insert again
         map.insert(1, 1);
 
         assert_eq!(map.len(), 1);
@@ -1558,6 +1602,7 @@ mod tests {
         map.shrink_to_fit();
 
         assert_eq!(map.len(), 10);
+        assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 10);
 
         // All elements are accessible
@@ -1577,6 +1622,7 @@ mod tests {
         }
 
         assert_eq!(map.len(), 10);
+        assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 16);
 
         // Shrink and reserve less than the current length (no effect)
@@ -1678,6 +1724,7 @@ mod tests {
 
         // Clone must have the same length and capacity as the original
         assert_eq!(cloned.len(), original.len());
+        assert_eq!(cloned.deleted, original.deleted);
         assert_eq!(cloned.capacity(), original.capacity());
 
         // Entries in the clone must be the same as in the original
@@ -1707,6 +1754,9 @@ mod tests {
 
         // Clone must have the same length as the original
         assert_eq!(cloned.len(), original.len());
+
+        // Deleted slots must be removed in the clone
+        assert_ne!(cloned.deleted, original.deleted);
 
         // Clone must have a capacity equal to the length of the original
         assert_eq!(cloned.capacity(), original.len());
@@ -1741,20 +1791,21 @@ mod tests {
     fn test_map_index_integrity() {
         let mut map= OmniMap::with_capacity(100);
 
-        // Initial state
+        // Initial state, all slots must be empty
+        assert!(map.index.iter().all(|slot| matches!(slot, Slot::Empty)));
+        assert_eq!(map.deleted, 0);
         assert_eq!(map.entries.len(), 0);
         assert_eq!(map.entries.capacity(), 100);
         assert_eq!(map.index.len(), 100);
         assert_eq!(map.index.capacity(), 100);
-        assert!(map.index.iter().all(|slot| matches!(slot, Slot::Empty)));
 
         // Full capacity
         for i in 0..100 {
             assert_eq!(map.insert(i, i), None);
         }
 
-        // Remove some keys
-        for i in 50..75 {
+        // Remove some entries
+        for i in 75..100 {
             assert_eq!(map.remove(&i), Some(i));
         }
 
@@ -1782,28 +1833,58 @@ mod tests {
         assert_eq!(deleted_indices, 25);
         assert_eq!(empty_indices, map.capacity() - (occupied_indices.len() + deleted_indices));
 
-        // Compact the map
+        // Compact the map to reindex
         map.shrink_to_fit();
 
         // No deleted slots should be present, all slots must be occupied
         assert!(map.index.iter().all(|slot| matches!(slot, Slot::Occupied(_))));
+        assert_eq!(map.deleted, 0);
         assert_eq!(map.entries.len(), 75);
         assert_eq!(map.entries.capacity(), 75);
         assert_eq!(map.index.len(), 75);
         assert_eq!(map.index.capacity(), 75);
 
-        // Update keys
+        // Update entries
         for i in 0..50 {
             map.insert(i, i * 2);
         }
 
-        // Read updated keys
+        // Read updated entries
         for i in 0..50 {
             assert_eq!(map.get(&i), Some(&(i * 2)));
         }
 
-        // Read remaining keys
-        for i in 75..100 {
+        // Compact the map to reindex
+        map.shrink_to_fit();
+
+        // Remove all entries
+        for i in 0..75 {
+            map.remove(&i);
+        }
+
+        // No occupied or empty slots should be present, all slots must be deleted
+        assert!(map.index.iter().all(|slot| matches!(slot, Slot::Deleted)));
+        assert_eq!(map.deleted, 75);
+        assert_eq!(map.entries.len(), 0);
+        assert_eq!(map.entries.capacity(), 75);
+        assert_eq!(map.index.len(), 75);
+        assert_eq!(map.index.capacity(), 75);
+
+        // Insert new entries, the map must be able to reindex successfully
+        for i in 0..100 {
+            map.insert(i, i);
+        }
+
+        // Map must be reindex successfully, no deleted slots should be present
+        assert!(map.index.iter().all(|slot| !matches!(slot, Slot::Deleted)));
+        assert_eq!(map.deleted, 0);
+        assert_eq!(map.entries.len(), 100);
+        assert_eq!(map.entries.capacity(), 256);
+        assert_eq!(map.index.len(), 256);
+        assert_eq!(map.index.capacity(), 256);
+
+        // Read updated keys
+        for i in 0..100 {
             assert_eq!(map.get(&i), Some(&i));
         }
     }
