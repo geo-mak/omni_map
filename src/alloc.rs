@@ -527,7 +527,7 @@ impl<T> AllocVec<T> {
         value
     }
 
-    /// Replaces the value at the given index with a new value.
+    /// Replaces the value at the given index with a new value and returns the old value.
     ///
     /// # Arguments
     ///
@@ -544,11 +544,11 @@ impl<T> AllocVec<T> {
     /// _O_(1).
     ///
     #[inline]
-    pub(crate) fn replace(&mut self, index: usize, new_value: T) {
+    pub(crate) fn replace(&mut self, index: usize, new_value: T) -> T {
         assert!(index < self.len, "Index out of bounds");
         unsafe {
             let ptr = self.ptr.as_ptr().add(index);
-            ptr::write(ptr, new_value);
+            ptr::replace(ptr, new_value)
         }
     }
 
@@ -1343,8 +1343,9 @@ mod tests {
         alloc_vec.push(1);
         alloc_vec.push(2);
         alloc_vec.push(3);
-        alloc_vec.replace(1, 10);
+        let old_value = alloc_vec.replace(1, 10);
         assert_eq!(alloc_vec[1], 10);
+        assert_eq!(old_value, 2);
     }
 
     #[test]
