@@ -1,11 +1,11 @@
-mod vec;
+mod alloc;
 
 use std::fmt;
 use std::fmt::{Debug, Display};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::{Index, IndexMut};
 
-use crate::vec::{AllocVec, AllocVecIntoIter};
+use crate::alloc::{AllocVec, AllocVecIntoIter};
 
 #[derive(Debug)]
 pub struct Entry<K, V> {
