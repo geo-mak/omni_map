@@ -10,10 +10,6 @@ use std::fmt::Debug;
 ///
 /// # Safety
 ///
-/// - `AllocVec` does not allow `zero-sized types` (ZSTs).
-///   Initializing with `ZSTs` will panic to avoid `undefined behavior`.
-///   Handling of ZSTs is left to the caller.
-///
 /// - The total size of the allocated memory must not exceed `isize::MAX` bytes.
 ///   If the total size exceeds `isize::MAX` bytes, the memory allocation will panic.
 ///   Ensuring that the total size does not exceed `isize::MAX` bytes is left to the caller.
@@ -57,9 +53,6 @@ impl<T> AllocVec<T> {
     #[must_use]
     #[inline]
     pub(crate) fn new() -> Self {
-        // Check for ZSTs
-        assert_ne!(size_of::<T>(), 0, "Zero-sized types are not allowed");
-
         // New dangling vector
         AllocVec {
             ptr: NonNull::dangling(),
@@ -88,9 +81,6 @@ impl<T> AllocVec<T> {
         if cap == 0 {
             return Self::new();
         }
-
-        // Check for ZSTs
-        assert_ne!(size_of::<T>(), 0, "Zero-sized types are not allowed");
 
         // New allocated vector
         AllocVec {
@@ -797,8 +787,6 @@ impl<T: Default> AllocVec<T> {
     #[must_use]
     #[inline]
     pub(crate) fn with_capacity_and_populate(cap: usize) -> Self {
-        // Check for ZSTs
-        assert_ne!(size_of::<T>(), 0, "Zero-sized types are not allowed");
 
         // No allocation required
         if cap == 0 {
@@ -925,7 +913,6 @@ impl<T: Clone> AllocVec<T> {
     /// Clones the `AllocVec` with two possible modes: `compact` or `full`.
     fn clone_in(&self, compact: bool) -> Self {
         // New dangling vector
-        // Checking for ZSTs is already done when creating a new AllocVec
         let mut new_vec = AllocVec {
             ptr: NonNull::dangling(),
             cap: 0,
@@ -1010,24 +997,6 @@ mod tests {
         for i in 0..capacity {
             assert_eq!(alloc_vec[i], u8::default());
         }
-    }
-
-    #[test]
-    #[should_panic(expected = "Zero-sized types are not allowed")]
-    fn test_alloc_vec_new_zst() {
-        let _alloc_vec: AllocVec<()> = AllocVec::new();
-    }
-
-    #[test]
-    #[should_panic(expected = "Zero-sized types are not allowed")]
-    fn test_alloc_vec_new_with_capacity_zst() {
-        let _alloc_vec: AllocVec<()> = AllocVec::with_capacity(1);
-    }
-
-    #[test]
-    #[should_panic(expected = "Zero-sized types are not allowed")]
-    fn test_alloc_vec_new_with_capacity_populate_zst() {
-        let _alloc_vec: AllocVec<()> = AllocVec::with_capacity_and_populate(1);
     }
 
     #[test]

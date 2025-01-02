@@ -57,8 +57,6 @@ impl Default for Slot {
 
 /// A hybrid data structure that combines the best of both hash maps and vectors.
 pub struct OmniMap<K, V> {
-    // AllocVec does not allow zero-sized types and will panic if used.
-    // Both Entry and Slot are guaranteed not to be zero-sized.
     entries: AllocVec<Entry<K, V>>,
     index: AllocVec<Slot>,
     deleted: usize,
@@ -1231,16 +1229,6 @@ mod tests {
         assert_eq!(map.len(), 0);
         assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 10);
-    }
-
-    #[test]
-    fn test_map_new_with_zst_ok() {
-        // Zero-sized types
-        let map: OmniMap<(), ()> = OmniMap::new(); // Must be Ok
-
-        assert_eq!(map.len(), 0);
-        assert_eq!(map.deleted, 0);
-        assert_eq!(map.capacity(), 0);
     }
 
     #[test]
