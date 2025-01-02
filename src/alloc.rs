@@ -1,18 +1,43 @@
-use std::alloc::{self, Layout};
+use std::alloc::{self, alloc, Layout};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Index, IndexMut, Range};
 use std::ptr::{self, NonNull};
 use std::fmt::Debug;
 
-/// Raw allocation buffer as vector to enable better control over memory allocation.
+/// Debug-mode check for the layout size and alignment.
+/// This function is only available in debug builds.
+///
+/// Conditions:
+///
+/// - `align` of `T` must not be zero.
+///
+/// - `align` of `T` must be a power of two.
+///
+/// - `size`, when rounded up to the nearest multiple of `align`, must be less than or
+///   equal to `isize::MAX`.
+///
+#[cfg(debug_assertions)]
+fn debug_layout_size_align(size: usize, align: usize) {
+    // Alignment check
+    assert!(align.is_power_of_two(), "Alignment must be a power of two");
+
+    // Size check
+    let max_size = (isize::MAX as usize + 1) - align;
+    assert!(max_size > size , "Size exceeds maximum limit on this platform");
+}
+
+/// Raw allocation buffer to enable better control over memory allocation.
 /// It relies on explicit calls to `reserve` to grow, otherwise,
 /// it will only allocate space for one element each time `push` is called.
 ///
+/// This buffer uses the registered `global allocator` to allocate memory.
+///
 /// # Safety
 ///
-/// - The total size of the allocated memory must not exceed `isize::MAX` bytes.
-///   If the total size exceeds `isize::MAX` bytes, the memory allocation will panic.
-///   Ensuring that the total size does not exceed `isize::MAX` bytes is left to the caller.
+/// The total size of the allocated memory when rounded up to the nearest multiple of `align`,
+/// must be less than or equal to `isize::MAX`.
+///
+/// If the total size exceeds `isize::MAX` bytes, the memory allocation will fail.
 ///
 /// # Internal representation:
 ///
@@ -29,7 +54,7 @@ use std::fmt::Debug;
 ///             |                       --
 ///             v                                --
 ///        +--------+--------+--------+--------+   |
-///        | val: T | val: T | uninit | uninit |   |--> Heap Layout::array::<T>(cap)
+///        | val: T | val: T | uninit | uninit |   |--> Heap memory
 ///        +--------+--------+--------+--------+   |
 ///          0x0123   0x0127   0x012B   0x012F     |    Alignment is illustrative
 ///             0       1        2        3      --
@@ -43,13 +68,9 @@ pub(crate) struct AllocVec<T> {
 }
 
 impl<T> AllocVec<T> {
+
     /// Creates a new, empty `AllocVec`.
     /// No memory is allocated until elements are pushed onto the vector.
-    ///
-    /// # Panics
-    ///
-    /// - If the type `T` is a zero-sized type.
-    ///
     #[must_use]
     #[inline]
     pub(crate) fn new() -> Self {
@@ -71,9 +92,10 @@ impl<T> AllocVec<T> {
     ///
     /// # Panics
     ///
-    /// - If the type `T` is a zero-sized type.
+    /// - When `cap` rounded up to the nearest multiple of `align` overflows `isize::MAX`.
     ///
-    /// - If the memory allocation fails.
+    /// - When the allocator refuses to allocate memory space, this can happen when the system is
+    ///   out of memory or the size of the requested block is too large.
     ///
     #[must_use]
     #[inline]
@@ -92,6 +114,7 @@ impl<T> AllocVec<T> {
     }
 
     /// Allocates memory space for the vector.
+    /// This method is checks for valid layout size and alignment in debug builds only.
     ///
     /// # Returns
     ///
@@ -99,22 +122,39 @@ impl<T> AllocVec<T> {
     ///
     /// # Panics
     ///
-    /// - If the capacity overflows `isize::MAX` bytes.
+    /// - When `cap` rounded up to the nearest multiple of `align` overflows `isize::MAX`.
     ///
-    /// - If the allocation fails and the pointer is null.
+    /// - When the allocator refuses to allocate memory space, this can happen when the system is
+    ///   out of memory or the size of the requested block is too large.
     ///
-    fn allocate_layout(cap: usize) -> NonNull<T>{
-        // Create a layout for the allocation
-        let layout = Layout::array::<T>(cap).expect("Allocation error: capacity overflow");
+    fn allocate_layout(cap: usize) -> NonNull<T> {
+        // Note: Checks are bypassed at runtime because there is no meaningful strategy to handle
+        // allocation errors other than panicking. It is just too much checking for nothing.
+
+        // New layout
+        let layout = unsafe {
+            let layout_size = cap.unchecked_mul(size_of::<T>());
+
+            // Debug-mode check for the layout size and alignment
+            #[cfg(debug_assertions)]
+            debug_layout_size_align(layout_size, align_of::<T>());
+
+            Layout::from_size_align_unchecked(layout_size, align_of::<T>())
+        };
+
         // Allocate memory space
-        let raw_ptr = unsafe { alloc::alloc(layout) as *mut T };
+        let ptr = unsafe { alloc(layout) as *mut T };
+
         // Return a non-null pointer
-        NonNull::new(raw_ptr).expect("Allocation error: pointer is null")
+        NonNull::new(ptr).expect("Allocation refused.")
     }
 
     /// Allocates the vector to a new capacity.
     ///
     /// # Safety
+    ///
+    /// - `cap`, when rounded up to the nearest multiple of `align`, must be less than or
+    ///   equal to `isize::MAX`.
     ///
     /// - This method will allocate memory for the new capacity without dropping the old elements.
     ///   Calling this method without dropping the old elements will cause memory leaks.
@@ -132,6 +172,9 @@ impl<T> AllocVec<T> {
     ///
     /// # Safety
     ///
+    /// - `cap`, when rounded up to the nearest multiple of `align`, must be less than or
+    ///   equal to `isize::MAX`.
+    ///
     /// - This method will reallocate memory with the valid pointer of the old layout.
     ///   Calling this method with dangling pointer will cause termination with `SIGABRT`.
     ///
@@ -142,12 +185,28 @@ impl<T> AllocVec<T> {
     ///   will cause undefined behavior.
     ///
     fn reallocate(&mut self, cap: usize) {
-        let old_layout = Layout::array::<T>(self.cap).expect("Allocation error: layout error");
-        let new_layout = Layout::array::<T>(cap).expect("Allocation error: capacity overflow");
-        let new_ptr = unsafe {
-            alloc::realloc(self.ptr.as_ptr() as *mut u8, old_layout, new_layout.size()) as *mut T
+        // Note: Checks are bypassed at runtime because there is no meaningful strategy to handle
+        // allocation errors other than panicking. It is just too much checking for nothing.
+
+        // Current layout
+        let current_layout = unsafe {
+            // Already checked in the `allocate_layout` function
+            let current_size = self.cap.unchecked_mul(size_of::<T>());
+            Layout::from_size_align_unchecked(current_size, align_of::<T>())
         };
-        self.ptr = NonNull::new(new_ptr).expect("Allocation error: pointer is null");
+
+        // New size
+        let new_size = unsafe {
+            cap.unchecked_mul(size_of::<T>())
+        };
+
+        // Reallocate memory space
+        let new_ptr = unsafe {
+            alloc::realloc(self.ptr.as_ptr() as *mut u8, current_layout, new_size) as *mut T
+        };
+
+        // Update the pointer and capacity
+        self.ptr = NonNull::new(new_ptr).expect("Reallocation refused.");
         self.cap = cap;
     }
 
@@ -257,12 +316,12 @@ impl<T> AllocVec<T> {
     /// > - If the new length is `0`, the `AllocVec` is cleared.
     ///
     /// > - If the new length is _greater_ than the current length, the `AllocVec` is extended by
-    ///     the difference, and the new elements are generated by the provided function.
+    /// >   the difference, and the new elements are generated by the provided function.
     ///
     /// > - If the new length is _less_ than the current length, the elements at the end of the
-    ///     `AllocVec` are dropped, and remaining elements will keep their values.
-    ///     However, this will *not* cause vector to shrink capacity. Allocated capacity will
-    ///     remain the same.
+    /// >   `AllocVec` are dropped, and remaining elements will keep their values.
+    /// >   However, this will *not* cause vector to shrink capacity. Allocated capacity will
+    /// >   remain the same.
     ///
     /// # Arguments
     ///
@@ -771,7 +830,9 @@ impl<T> IndexMut<Range<usize>> for AllocVec<T> {
 }
 
 impl<T: Default> AllocVec<T> {
-    /// Creates a new `AllocVec` with the specified capacity and populates it with the default value of `T`.
+    /// Creates a new `AllocVec` with the specified capacity and populates it with the default
+    /// value of `T`.
+    ///
     /// Memory is allocated for the specified capacity, and the length is set to the capacity.
     ///
     /// # Arguments
@@ -780,9 +841,10 @@ impl<T: Default> AllocVec<T> {
     ///
     /// # Panics
     ///
-    /// - If the type `T` is a zero-sized type.
+    /// - When `cap` rounded up to the nearest multiple of `align` overflows `isize::MAX`.
     ///
-    /// - If the memory allocation fails.
+    /// - When the allocator refuses to allocate memory space, this can happen when the system is
+    ///   out of memory or the size of the requested block is too large.
     ///
     #[must_use]
     #[inline]
@@ -982,6 +1044,12 @@ mod tests {
         let alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         assert_eq!(alloc_vec.capacity(), 10);
         assert_eq!(alloc_vec.len(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Size exceeds maximum limit on this platform")]
+    fn test_alloc_vec_with_capacity_overflow() {
+        let _: AllocVec<u8> = AllocVec::with_capacity(isize::MAX as usize + 1);
     }
 
     #[test]
@@ -1411,7 +1479,7 @@ mod tests {
     fn test_alloc_vec_deref_empty() {
         let alloc_vec: AllocVec<u8> = AllocVec::new();
         let slice: &[u8] = &*alloc_vec;
-        assert_eq!(slice, &[]);
+        assert!(slice.is_empty());
     }
 
     #[test]
@@ -1428,7 +1496,7 @@ mod tests {
     fn test_alloc_vec_deref_mut_empty() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new();
         let slice: &mut [u8] = &mut *alloc_vec;
-        assert_eq!(slice, &[]);
+        assert!(slice.is_empty());
     }
 
     #[test]
