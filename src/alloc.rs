@@ -173,6 +173,12 @@ impl<T> AllocVec<T> {
         self.len
     }
 
+    /// Returns `true` if the `AllocVec` is empty.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
     /// Reserves capacity for at least `additional` more elements.
     /// The resulted capacity will be `self.capacity() + additional`.
     ///
