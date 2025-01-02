@@ -276,33 +276,33 @@ impl<T> AllocVec<T> {
     ///
     /// # Time Complexity
     ///
-    /// _O_(n) where n is the new length of the `AllocVec`.
+    /// _O_(n) on average where n is the new length of the `AllocVec`.
     ///
     pub(crate) fn resize_with<F>(&mut self, new_len: usize, mut f: F)
-        where
-            F: FnMut() -> T,
-        {
-            if new_len == self.len {
-                // Length is equal to the current length, do nothing
-                return;
-            } else if new_len > self.len {
-                // Reserve additional space if needed
-                if new_len > self.cap {
-                    self.reserve(new_len - self.len);
+    where
+        F: FnMut() -> T,
+    {
+        if new_len == self.len {
+            // Length is equal to the current length, do nothing
+            return;
+        } else if new_len > self.len {
+            // Reserve additional space if needed
+            if new_len > self.cap {
+                self.reserve(new_len - self.len);
+            }
+            // Fill in the new elements
+            for i in self.len..new_len {
+                unsafe {
+                    ptr::write(self.ptr.as_ptr().add(i), f());
                 }
-                // Fill in the new elements
-                for i in self.len..new_len {
-                    unsafe {
-                        ptr::write(self.ptr.as_ptr().add(i), f());
-                        }
-                    }
-                    // Update length
-                    self.len = new_len;
-            } else {
-                // Length is less than the current length
-                self.truncate(new_len)
-            };
-        }
+            }
+            // Update length
+            self.len = new_len;
+        } else {
+            // Length is less than the current length
+            self.truncate(new_len)
+        };
+    }
 
     /// Shortens the vector, keeping the first len elements and dropping the rest.
     /// This method has no effect, if the vector is empty or `len` is greater or equal to the
@@ -316,7 +316,7 @@ impl<T> AllocVec<T> {
     ///
     /// # Time Complexity
     ///
-    /// _O_(n) where n is the new length of the `AllocVec`.
+    /// _O_(n) where n is the number of elements to drop (self.len - len).
     ///
     pub(crate) fn truncate(&mut self, len: usize) {
         if len > self.len{
@@ -343,7 +343,9 @@ impl<T> AllocVec<T> {
     ///
     /// # Time Complexity
     ///
-    /// - Amortized _O_(1).
+    /// - _O_(1) if the `AllocVec` does not need to grow.
+    ///
+    /// - _O_(n) if the `AllocVec` needs to grow, where n is the new capacity.
     ///
     #[inline]
     pub(crate) fn push(&mut self, value: T) {
@@ -474,7 +476,7 @@ impl<T> AllocVec<T> {
     ///
     /// # Time Complexity
     ///
-    /// _O_(n) where n is the length of the `AllocVec`.
+    /// _O_(n) where n is the length of the `AllocVec` minus the index.
     ///
     pub(crate) fn remove(&mut self, index: usize) -> T {
         assert!(index < self.len, "Index out of bounds");
@@ -514,7 +516,7 @@ impl<T> AllocVec<T> {
     ///
     /// # Time Complexity
     ///
-    /// _O_(n) where n is the length of the `AllocVec`.
+    /// _O_(n) where n is the length of the `AllocVec` minus 1.
     ///
     #[inline]
     pub(crate) fn pop_front(&mut self) -> T {
@@ -565,6 +567,7 @@ impl<T> AllocVec<T> {
     /// Panics if either index is out of bounds.
     ///
     /// # Time Complexity
+    ///
     /// _O_(1).
     ///
     #[inline]
@@ -1020,7 +1023,7 @@ mod tests {
     fn test_alloc_vec_new_with_capacity_populate_zst() {
         let _alloc_vec: AllocVec<()> = AllocVec::with_capacity_and_populate(1);
     }
-    
+
     #[test]
     fn test_alloc_vec_reserve() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
