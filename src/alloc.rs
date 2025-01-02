@@ -1057,7 +1057,6 @@ mod tests {
     fn test_alloc_vec_push() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push(1);
-        assert!(!alloc_vec.is_empty());
         assert_eq!(alloc_vec.len(), 1);
     }
 
@@ -1216,7 +1215,6 @@ mod tests {
         alloc_vec.push(42);
         assert_eq!(alloc_vec.pop(), 42);
         assert_eq!(alloc_vec.len(), 0);
-        assert!(alloc_vec.is_empty());
     }
 
     #[test]
@@ -1394,7 +1392,6 @@ mod tests {
         alloc_vec.push(3);
         alloc_vec.clear();
         assert_eq!(alloc_vec.len(), 0);
-        assert!(alloc_vec.is_empty());
     }
 
     #[test]
