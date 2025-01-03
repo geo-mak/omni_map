@@ -423,77 +423,6 @@ impl<T> AllocVec<T> {
         self.len += 1;
     }
 
-    /// Attempts to append an element to the back of the `AllocVec`.
-    ///
-    /// If the `AllocVec` has reached its capacity, the method returns an `Err` containing the value.
-    ///
-    /// # Arguments
-    ///
-    /// - `value` - The value to append.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(())` if the element was successfully appended.
-    ///
-    /// - `Err(value)` if the `AllocVec` is at full capacity.
-    ///
-    /// # Time Complexity
-    ///
-    /// _O_(1).
-    ///
-    #[inline]
-    pub(crate) fn try_push(&mut self, value: T) -> Result<(), T> {
-        if self.len == self.cap {
-            return Err(value);
-        }
-        unsafe {
-            ptr::write(self.ptr.as_ptr().add(self.len), value);
-        }
-        // Update length
-        self.len += 1;
-        Ok(())
-    }
-
-    /// Returns a reference to the element at the specified index, or `None` if out of bounds.
-    ///
-    /// # Arguments
-    ///
-    /// - `index` - The index of the element to retrieve.
-    ///
-    /// # Time Complexity
-    ///
-    /// _O_(1).
-    ///
-    #[must_use]
-    #[inline]
-    pub(crate) fn get(&self, index: usize) -> Option<&T> {
-        if index < self.len {
-            unsafe { Some(&*self.ptr.as_ptr().add(index)) }
-        } else {
-            None
-        }
-    }
-
-    /// Returns a reference to the element at the specified index, or `None` if out of bounds.
-    ///
-    /// # Arguments
-    ///
-    /// - `index` - The index of the element to retrieve.
-    ///
-    /// # Time Complexity
-    ///
-    /// _O_(1).
-    ///
-    #[must_use]
-    #[inline]
-    pub(crate) fn get_mut(&mut self, index: usize) -> Option<&mut T> {
-        if index < self.len {
-            unsafe { Some(&mut *self.ptr.as_ptr().add(index)) }
-        } else {
-            None
-        }
-    }
-
     /// Returns a reference to the first element.
     ///
     /// # Panics
@@ -1114,43 +1043,6 @@ mod tests {
         let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push_no_grow(1);
         assert_eq!(alloc_vec.len(), 1);
-    }
-
-    #[test]
-    fn test_try_push() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(2);
-        assert_eq!(alloc_vec.try_push(1), Ok(()));
-        assert_eq!(alloc_vec.try_push(2), Ok(()));
-
-        // Should return an error as capacity is full
-        assert_eq!(alloc_vec.try_push(3), Err(3));
-        assert_eq!(alloc_vec.len(), 2);
-        assert_eq!(alloc_vec[0], 1);
-        assert_eq!(alloc_vec[1], 2);
-    }
-
-    #[test]
-    fn test_alloc_vec_get() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
-        assert_eq!(alloc_vec.get(0), Some(&1));
-        assert_eq!(alloc_vec.get(1), Some(&2));
-        assert_eq!(alloc_vec.get(2), Some(&3));
-        assert_eq!(alloc_vec.get(3), None);
-    }
-
-    #[test]
-    fn test_alloc_vec_get_mut() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
-        if let Some(value) = alloc_vec.get_mut(1) {
-            *value = 10;
-        }
-        assert_eq!(alloc_vec.get(1), Some(&10));
     }
 
     #[test]
