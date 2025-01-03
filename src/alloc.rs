@@ -189,13 +189,6 @@ impl<T> AllocVec<T> {
         let t_size = size_of::<T>(); // Size of T, const
         let t_align = align_of::<T>(); // Alignment of T, const
 
-        // Current layout
-        let current_layout = unsafe {
-            // Already checked in the `allocate_layout` function
-            let current_size = self.cap.unchecked_mul(t_size);
-            Layout::from_size_align_unchecked(current_size, t_align)
-        };
-
         // New size
         let new_size = unsafe {
             cap.unchecked_mul(t_size)
@@ -204,6 +197,13 @@ impl<T> AllocVec<T> {
         // Debug-mode check for the new layout
         #[cfg(debug_assertions)]
         debug_layout_size_align(new_size, t_align);
+
+        // Current layout
+        let current_layout = unsafe {
+            // Already checked in the `allocate_layout` function
+            let current_size = self.cap.unchecked_mul(t_size);
+            Layout::from_size_align_unchecked(current_size, t_align)
+        };
 
         // Reallocate memory space
         let new_ptr = unsafe {
@@ -269,6 +269,12 @@ impl<T> AllocVec<T> {
 
     /// Shrinks the capacity of the `AllocVec` to the specified capacity.
     ///
+    ///
+    /// # Safety
+    ///
+    /// `new_cap` must be less than the current capacity and greater than or equal to the length.
+    /// These conditions are checked in debug mode only.
+    ///
     /// # Arguments
     ///
     /// - `new_cap` - The new capacity of the `AllocVec`.
@@ -277,19 +283,19 @@ impl<T> AllocVec<T> {
     ///
     /// _O_(n) where n is the new capacity of the `AllocVec`.
     ///
-    #[inline]
-    pub(crate) fn shrink_to(&mut self, new_cap: usize) {
-        if new_cap < self.cap && new_cap >= self.len {
-            // This is safe because the pointer is not dangling.
-            self.reallocate(new_cap);
-        }
+    #[inline(always)]
+    pub(crate) fn shrink_to_unchecked(&mut self, new_cap: usize) {
+        debug_assert!(new_cap < self.cap, "Capacity must be less than the current capacity");
+        debug_assert!(new_cap >= self.len, "Capacity must be greater than or equal to the length");
+        self.reallocate(new_cap);
     }
 
     /// Shrinks the capacity of the `AllocVec` to match its current length.
     ///
-    /// This method reallocates the internal buffer to fit exactly the number of elements currently
-    /// stored in the `AllocVec`. If the current capacity is already equal to the length, this method
-    /// does nothing.
+    /// # Safety
+    ///
+    /// The current capacity must be greater than the length.
+    /// This condition is checked in debug mode only.
     ///
     /// # Panics
     ///
@@ -299,12 +305,10 @@ impl<T> AllocVec<T> {
     ///
     /// _O_(n) where n is the length of the `AllocVec`.
     ///
-    #[inline]
-    pub(crate) fn shrink_to_fit(&mut self) {
-        if self.cap > self.len {
-            // This is safe because the pointer is not dangling
-            self.reallocate(self.len);
-        }
+    #[inline(always)]
+    pub(crate) fn shrink_to_fit_unchecked(&mut self) {
+        debug_assert!(self.cap > self.len, "Capacity must be greater than the length");
+        self.reallocate(self.len);
     }
 
     /// Resizes the `AllocVec` to the specified length, using the provided function to generate
@@ -1097,7 +1101,7 @@ mod tests {
         alloc_vec.push_no_grow(2);
         alloc_vec.push_no_grow(3);
         assert_eq!(alloc_vec.capacity(), 10);
-        alloc_vec.shrink_to_fit();
+        alloc_vec.shrink_to_fit_unchecked();
         assert_eq!(alloc_vec.capacity(), 3);
         assert_eq!(alloc_vec.len(), 3);
         assert_eq!(alloc_vec[0], 1);

@@ -772,14 +772,14 @@ where
     /// ```
     #[inline]
     pub fn shrink_to(&mut self, capacity: usize) {
-        // Capacity must be less than the current capacity and greater than or equal to the number of elements
+        // Capacity must be less than the current capacity and greater than or equal to the number
+        // of elements.
         if capacity < self.index.capacity() && capacity >= self.entries.len() {
-            // NOTE: This call is no-op if the capacity is not less than the current
-            // capacity and greater than or equal to the number of elements
-            self.entries.shrink_to(capacity);
+            // NOTE: This call is safe, because its conditions are checked already.
+            self.entries.shrink_to_unchecked(capacity);
             // Reset the index with the new capacity.
             self.reset_index(capacity);
-            // Rebuild the index with the new capacity
+            // Rebuild the index with the new capacity.
             self.build_index();
         }
     }
@@ -811,13 +811,13 @@ where
     /// ```
     #[inline]
     pub fn shrink_to_fit(&mut self) {
-        // Capacity must be greater to the number of elements
+        // Capacity must be greater than the number of elements.
         if self.index.capacity() > self.entries.len() {
-            // NOTE: This call is no-op if the capacity is not larger than the length.
-            self.entries.shrink_to_fit();
+            // NOTE: This call is safe, because its condition is checked already.
+            self.entries.shrink_to_fit_unchecked();
             // Reset the index with the new capacity.
             self.reset_index(self.entries.len());
-            // Rebuild the index with the new capacity
+            // Rebuild the index with the new capacity.
             self.build_index();
         }
     }
