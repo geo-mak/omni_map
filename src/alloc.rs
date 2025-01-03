@@ -188,17 +188,24 @@ impl<T> AllocVec<T> {
         // Note: Checks are bypassed at runtime because there is no meaningful strategy to handle
         // allocation errors other than panicking. It is just too much checking for nothing.
 
+        let t_size = size_of::<T>(); // Size of T, const
+        let t_align = align_of::<T>(); // Alignment of T, const
+
         // Current layout
         let current_layout = unsafe {
             // Already checked in the `allocate_layout` function
-            let current_size = self.cap.unchecked_mul(size_of::<T>());
-            Layout::from_size_align_unchecked(current_size, align_of::<T>())
+            let current_size = self.cap.unchecked_mul(t_size);
+            Layout::from_size_align_unchecked(current_size, t_align)
         };
 
         // New size
         let new_size = unsafe {
-            cap.unchecked_mul(size_of::<T>())
+            cap.unchecked_mul(t_size)
         };
+
+        // Debug-mode check for the new layout
+        #[cfg(debug_assertions)]
+        debug_layout_size_align(new_size, t_align);
 
         // Reallocate memory space
         let new_ptr = unsafe {
@@ -1073,6 +1080,16 @@ mod tests {
         assert_eq!(alloc_vec.capacity(), 10);
         alloc_vec.reserve(5);
         assert_eq!(alloc_vec.capacity(), 15);
+    }
+
+    #[test]
+    #[should_panic(expected = "Size exceeds maximum limit on this platform")]
+    fn test_alloc_vec_reserve_capacity_overflow() {
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
+        assert_eq!(alloc_vec.capacity(), 10);
+
+        // Should panic as the new capacity will overflow
+        alloc_vec.reserve(isize::MAX as usize - 10);
     }
 
     #[test]
