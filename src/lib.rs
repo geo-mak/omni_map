@@ -278,22 +278,23 @@ where
         }
     }
 
-    /// Expands the capacity of the map with reindexing.
+    /// Grows the capacity of the map with reindexing.
     ///
     /// # Parameters
     ///
-    /// - `additional`: The number of additional slots to allocate.
+    /// - `new_cap`: The new capacity of the map.
     ///
-    fn grow_reindex(&mut self, additional: usize) {
+    fn grow_reindex(&mut self, new_cap: usize) {
         // This must be ensured by the calling contexts.
         debug_assert!(
-            additional > 0,
-            "Logic error: additional capacity must be greater than zero."
+            new_cap > self.capacity(),
+            "Logic error: new capacity must be larger than the current capacity."
         );
-        // Reserve the additional capacity.
-        // NOTE: If the new capacity isn't larger than the current capacity,
+
+        // Reserve the new capacity for the entries.
+        // Note: If the new capacity isn't larger than the current capacity,
         // the vector will not reallocate. So this call is safe even if the capacity is zero.
-        self.entries.reserve(additional);
+        self.entries.grow(new_cap);
         // Reset the index with the new capacity.
         self.reset_index(self.entries.capacity());
         // Rebuild the index with the new capacity.
@@ -308,16 +309,19 @@ where
 
         // If the current load exceeds the load factor, grow the capacity.
         if load_factor > Self::LOAD_FACTOR {
-            // Calculate the new capacity
             let growth_factor = (current_cap as f64 / Self::LOAD_FACTOR).ceil() as usize;
 
+            // New capacity must be within the range of `usize` and less than or equal to
+            // `isize::MAX` when rounded up to the nearest multiple of `align` to ensure successful
+            // allocation.
+            // Error-handling is not needed because there is no way to communicate these errors to
+            // the caller without making insert, reserve, etc. return a Result.
             let new_cap = growth_factor
                 .checked_next_power_of_two()
-                .unwrap_or(usize::MAX); // Handle overflow
+                .unwrap_or(usize::MAX);
 
-            let additional = new_cap - current_cap;
             // Allocate the additional capacity with reindexing
-            self.grow_reindex(additional);
+            self.grow_reindex(new_cap);
         }
     }
 
@@ -352,7 +356,7 @@ where
         if additional == 0 {
             return;
         }
-        self.grow_reindex(additional);
+        self.grow_reindex(self.index.capacity() + additional);
     }
 
     /// This method will grow the capacity of the map if the current load exceeds the load factor.
@@ -362,8 +366,8 @@ where
         // Ensure that the map has enough capacity to insert the new key-value pair.
         if self.index.capacity() == 0 {
             // Allocate initial capacity without reindexing.
-            // Resize the same index with new empty slots.
             self.index.resize_with(1, || Slot::Empty);
+            self.entries.grow(1);
         } else {
             // This will reindex the map if the capacity is grown.
             self.maybe_grow();
@@ -434,7 +438,7 @@ where
                 );
 
                 // Insert the new key-value pair
-                self.entries.push(Entry::new(key, value, hash));
+                self.entries.push_no_grow(Entry::new(key, value, hash));
                 let entry_index = self.entries.len() - 1;
                 self.index[slot_index] = Slot::Occupied(entry_index);
                 None
