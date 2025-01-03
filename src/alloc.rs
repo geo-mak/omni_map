@@ -425,9 +425,11 @@ impl<T> AllocVec<T> {
 
     /// Returns a reference to the first element.
     ///
-    /// # Panics
     ///
-    /// Panics if the `AllocVec` is empty.
+    /// # Safety
+    ///
+    /// This method checks for out of bounds access in debug mode only.
+    /// The caller must ensure that the `AllocVec` is not empty.
     ///
     /// # Time Complexity
     ///
@@ -436,15 +438,16 @@ impl<T> AllocVec<T> {
     #[must_use]
     #[inline]
     pub(crate) fn first(&self) -> &T {
-        assert!(self.len > 0, "Index out of bounds");
+        debug_assert!(self.len > 0, "Index out of bounds");
         unsafe { &*self.ptr.as_ptr() }
     }
 
     /// Returns a reference to the last element.
     ///
-    /// # Panics
+    /// # Safety
     ///
-    /// Panics if the `AllocVec` is empty.
+    /// This method checks for out of bounds access in debug mode only.
+    /// The caller must ensure that the `AllocVec` is not empty.
     ///
     /// # Time Complexity
     ///
@@ -453,7 +456,7 @@ impl<T> AllocVec<T> {
     #[must_use]
     #[inline]
     pub(crate) fn last(&self) -> &T {
-        assert!(self.len > 0, "Index out of bounds");
+        debug_assert!(self.len > 0, "Index out of bounds");
         unsafe { &*self.ptr.as_ptr().add(self.len - 1) }
     }
 
@@ -463,16 +466,17 @@ impl<T> AllocVec<T> {
     ///
     /// - `index` - The index of the element to remove.
     ///
-    /// # Panics
+    /// # Safety
     ///
-    /// Panics if the index is out of bounds.
+    /// This method checks for out of bounds access in debug mode only.
+    /// The caller must ensure that `index` is within the bounds of the `AllocVec`.
     ///
     /// # Time Complexity
     ///
     /// _O_(n) where n is the length of the `AllocVec` minus the index.
     ///
     pub(crate) fn remove(&mut self, index: usize) -> T {
-        assert!(index < self.len, "Index out of bounds");
+        debug_assert!(index < self.len, "Index out of bounds");
         // Update len first
         self.len -= 1;
         unsafe {
@@ -486,9 +490,10 @@ impl<T> AllocVec<T> {
 
     /// Removes the last element and returns it.
     ///
-    /// # Panics
+    /// # Safety
     ///
-    /// Panics if the `AllocVec` is empty.
+    /// This method checks for out of bounds access in debug mode only.
+    /// The caller must ensure that the `AllocVec` is not empty.
     ///
     /// # Time Complexity
     ///
@@ -496,16 +501,17 @@ impl<T> AllocVec<T> {
     ///
     #[inline]
     pub(crate) fn pop(&mut self) -> T {
-        assert!(self.len > 0, "Index out of bounds");
+        debug_assert!(self.len > 0, "Index out of bounds");
         self.len -= 1;
         unsafe { ptr::read(self.ptr.as_ptr().add(self.len)) }
     }
 
     /// Removes the first element and returns it.
     ///
-    /// # Panics
+    /// # Safety
     ///
-    /// Panics if the `AllocVec` is empty.
+    /// This method checks for out of bounds access in debug mode only.
+    /// The caller must ensure that the `AllocVec` is not empty.
     ///
     /// # Time Complexity
     ///
@@ -513,7 +519,7 @@ impl<T> AllocVec<T> {
     ///
     #[inline]
     pub(crate) fn pop_front(&mut self) -> T {
-        assert!(self.len > 0, "Index out of bounds");
+        debug_assert!(self.len > 0, "Index out of bounds");
         let value = unsafe { ptr::read(self.ptr.as_ptr()) };
         self.len -= 1;
         unsafe {
@@ -540,6 +546,7 @@ impl<T> AllocVec<T> {
     ///
     #[inline]
     pub(crate) fn replace(&mut self, index: usize, new_value: T) -> T {
+        // This must be release-mode check because the exposing API is expected to be the same.
         assert!(index < self.len, "Index out of bounds");
         unsafe {
             let ptr = self.ptr.as_ptr().add(index);
@@ -565,6 +572,7 @@ impl<T> AllocVec<T> {
     ///
     #[inline]
     pub(crate) fn swap(&mut self, index1: usize, index2: usize) {
+        // This must be release-mode check because the exposing API is expected to be the same.
         assert!(index1 < self.len, "Index1 out of bounds");
         assert!(index2 < self.len, "Index2 out of bounds");
         unsafe {
@@ -590,6 +598,7 @@ impl<T> AllocVec<T> {
     ///
     #[inline]
     pub(crate) fn chunks(&self, chunk_size: usize) -> std::slice::Chunks<'_, T> {
+        // This must be release-mode check because the exposing API is expected to be the same.
         assert!(chunk_size > 0, "Chunk size must be greater than 0");
         unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len).chunks(chunk_size) }
     }
@@ -610,6 +619,7 @@ impl<T> AllocVec<T> {
     ///
     #[inline]
     pub(crate) fn chunks_mut(&mut self, chunk_size: usize) -> std::slice::ChunksMut<'_, T> {
+        // This must be release-mode check because the exposing API is expected to be the same.
         assert!(chunk_size > 0, "Chunk size must be greater than 0");
         unsafe {
             std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len).chunks_mut(chunk_size)
@@ -714,6 +724,7 @@ impl<T> Index<usize> for AllocVec<T> {
     /// Panics if the index is out of bounds.
     ///
     fn index(&self, index: usize) -> &Self::Output {
+        // This must be release-mode check because the exposing API is expected to be the same.
         assert!(index < self.len, "Index out of bounds");
         unsafe { &*self.ptr.as_ptr().add(index) }
     }
@@ -731,6 +742,7 @@ impl<T> IndexMut<usize> for AllocVec<T> {
     /// Panics if the index is out of bounds.
     ///
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        // This must be release-mode check because the exposing API is expected to be the same.
         assert!(index < self.len, "Index out of bounds");
         unsafe { &mut *self.ptr.as_ptr().add(index) }
     }
@@ -740,6 +752,7 @@ impl<T> Index<Range<usize>> for AllocVec<T> {
     type Output = [T];
 
     fn index(&self, range: Range<usize>) -> &Self::Output {
+        // These must be release-mode checks because the exposing API is expected to be the same.
         assert!(
             range.start <= range.end,
             "Invalid range: start is greater than end"
@@ -753,6 +766,7 @@ impl<T> Index<Range<usize>> for AllocVec<T> {
 
 impl<T> IndexMut<Range<usize>> for AllocVec<T> {
     fn index_mut(&mut self, range: Range<usize>) -> &mut Self::Output {
+        // This must be release-mode check because the exposing API is expected to be the same.
         assert!(
             range.start <= range.end,
             "Invalid range: start is greater than end"
