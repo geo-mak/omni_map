@@ -454,7 +454,9 @@ where
     ///
     /// # Returns
     ///
-    /// An `Option` containing the value if the key is found, or `None` if the key does not exist.
+    /// - `Some(&value)`: if the key is found.
+    ///
+    /// - `None`: if the key does not exist.
     ///
     /// # Time Complexity
     ///
@@ -492,7 +494,9 @@ where
     ///
     /// # Returns
     ///
-    /// An `Option` containing a mutable reference to the value if the key is found, or `None` if the key does not exist.
+    /// - `Some(&mut value)`: If the key is found.
+    ///
+    /// - `None`: If the key does not exist.
     ///
     /// # Time Complexity
     ///
@@ -530,7 +534,9 @@ where
     ///
     /// # Returns
     ///
-    /// An `Option` containing the key-value pair of the first inserted entry if the map is not empty.
+    /// - `Some((&key, &value))`: If the map is not empty.
+    ///
+    /// - `None`: If the map is empty.
     ///
     /// # Time Complexity
     ///
@@ -563,7 +569,9 @@ where
     ///
     /// # Returns
     ///
-    /// An `Option` containing the key-value pair of the last inserted entry if the map is not empty.
+    /// - `Some((&key, &value))`: If the map is not empty.
+    ///
+    /// - `None`: If the map is empty.
     ///
     /// # Time Complexity
     ///
@@ -600,8 +608,9 @@ where
     ///
     /// # Returns
     ///
-    /// An `Option` containing the value of the removed entry if the key exists,
-    /// or `None` if the key does not exist.
+    /// - `Some(value)`: If the key is found and removed.
+    ///
+    /// - `None`: If the key does not exist.
     ///
     /// # Time Complexity
     ///
@@ -667,7 +676,9 @@ where
     ///
     /// # Returns
     ///
-    /// An `Option` containing the key-value pair if the map is not empty.
+    /// - `Some((key, value))`: If the map is not empty.
+    ///
+    /// - `None`: If the map is empty.
     ///
     /// # Time Complexity
     ///
@@ -704,7 +715,9 @@ where
     ///
     /// # Returns
     ///
-    /// An `Option` containing the key-value pair if the map is not empty.
+    /// - `Some((key, value))`: If the map is not empty.
+    ///
+    /// - `None`: If the map is empty.
     ///
     /// # Time Complexity
     ///
