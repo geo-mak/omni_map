@@ -687,14 +687,19 @@ impl<T> AllocVec<T> {
 }
 
 impl<T> Drop for AllocVec<T> {
-    /// Drops the `AllocVec`, deallocating its memory.
+    /// Calls drop on each element and deallocates the memory space.
     fn drop(&mut self) {
         if self.cap != 0 {
-            let layout = Layout::array::<T>(self.cap).expect("Deallocation error: layout error");
             unsafe {
+                // Already checked in the `allocate_layout` function.
+                // `size_of` and `align_of` are const.
+                let layout = Layout::from_size_align_unchecked(
+                    self.cap * size_of::<T>(),
+                    align_of::<T>()
+                );
                 // Call drop on each element to release their resources.
                 ptr::drop_in_place(std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len));
-                // Deallocate memory space
+                // Deallocate memory space.
                 alloc::dealloc(self.ptr.as_ptr() as *mut u8, layout);
             }
         }
@@ -1347,16 +1352,6 @@ mod tests {
     }
 
     #[test]
-    fn test_alloc_vec_clear() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
-        alloc_vec.clear();
-        assert_eq!(alloc_vec.len(), 0);
-    }
-
-    #[test]
     fn test_alloc_vec_for_loop() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(3);
         alloc_vec.push_no_grow(1);
@@ -1433,6 +1428,53 @@ mod tests {
         let slice: &mut [u8] = &mut *alloc_vec;
         slice[0] = 10;
         assert_eq!(slice, &[10, 2, 3]);
+    }
+
+    #[test]
+    fn test_alloc_vec_clear() {
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
+        alloc_vec.push_no_grow(1);
+        alloc_vec.push_no_grow(2);
+        alloc_vec.push_no_grow(3);
+        alloc_vec.clear();
+        assert_eq!(alloc_vec.len(), 0);
+    }
+
+    #[test]
+    fn test_alloc_vec_drop() {
+        use std::rc::Rc;
+        use std::cell::RefCell;
+
+        #[derive(Debug)]
+        struct DropCounter {
+            count: Rc<RefCell<usize>>,
+        }
+
+        impl Drop for DropCounter {
+            fn drop(&mut self) {
+                // Increment the drop count.
+                *self.count.borrow_mut() += 1;
+            }
+        }
+
+        // Drop counter with 0 count initially.
+        let drop_count = Rc::new(RefCell::new(0));
+
+        let mut alloc_vec: AllocVec<DropCounter> = AllocVec::with_capacity(3);
+
+        // Reference 3 elements to the same drop counter.
+        alloc_vec.push_no_grow(DropCounter { count: Rc::clone(&drop_count) });
+        alloc_vec.push_no_grow(DropCounter { count: Rc::clone(&drop_count) });
+        alloc_vec.push_no_grow(DropCounter { count: Rc::clone(&drop_count) });
+
+        assert_eq!(alloc_vec.len(), 3);
+
+        // Drop the vector
+        drop(alloc_vec);
+
+        // Since the `drop` has been called, vector should have called drop on all elements,
+        // so the drop count must be 3.
+        assert_eq!(*drop_count.borrow(), 3);
     }
 
     #[test]
