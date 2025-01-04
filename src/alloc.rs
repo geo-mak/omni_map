@@ -268,54 +268,6 @@ impl<T> AllocVec<T> {
         }
     }
 
-    /// Shrinks the capacity of the `AllocVec` to the specified capacity.
-    ///
-    ///
-    /// # Safety
-    ///
-    /// `new_cap` must be less than the current capacity and greater than or equal to the length.
-    ///
-    /// These conditions are checked in debug mode only.
-    ///
-    /// # Arguments
-    ///
-    /// - `new_cap` - The new capacity of the `AllocVec`.
-    ///
-    /// # Time Complexity
-    ///
-    /// _O_(n) where n is the new capacity of the `AllocVec`.
-    ///
-    #[inline(always)]
-    pub(crate) fn shrink_to_unchecked(&mut self, new_cap: usize) {
-        // This must be ensured by the caller.
-        debug_assert!(new_cap < self.cap, "Capacity must be less than the current capacity");
-        debug_assert!(new_cap >= self.len, "Capacity must be greater than or equal to the length");
-        self.reallocate(new_cap);
-    }
-
-    /// Shrinks the capacity of the `AllocVec` to match its current length.
-    ///
-    /// # Safety
-    ///
-    /// The current capacity must be greater than the length.
-    ///
-    /// This condition is checked in debug mode only.
-    ///
-    /// # Panics
-    ///
-    /// This method will panic if the new layout for the reallocation cannot be created.
-    ///
-    /// # Time Complexity
-    ///
-    /// _O_(n) where n is the length of the `AllocVec`.
-    ///
-    #[inline(always)]
-    pub(crate) fn shrink_to_fit_unchecked(&mut self) {
-        // This must be ensured by the caller.
-        debug_assert!(self.cap > self.len, "Capacity must be greater than the length");
-        self.reallocate(self.len);
-    }
-
     /// Resizes the `AllocVec` to the specified length, using the provided function to generate
     /// new elements.
     ///
@@ -1063,21 +1015,6 @@ mod tests {
 
         // Should panic as the new capacity will overflow
         alloc_vec.grow(isize::MAX as usize + 1);
-    }
-
-    #[test]
-    fn test_alloc_vec_shrink() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
-        assert_eq!(alloc_vec.capacity(), 10);
-        alloc_vec.shrink_to_fit_unchecked();
-        assert_eq!(alloc_vec.capacity(), 3);
-        assert_eq!(alloc_vec.len(), 3);
-        assert_eq!(alloc_vec[0], 1);
-        assert_eq!(alloc_vec[1], 2);
-        assert_eq!(alloc_vec[2], 3);
     }
 
     #[test]
