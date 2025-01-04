@@ -201,7 +201,7 @@ where
     /// - `(slot, None)`: If the slot is empty or no key match is found.
     ///   The returned slot is the last checked slot before the search ends.
     ///
-    fn find_slot(&self, hash: &usize, key: &K) -> (usize, Option<usize>) {
+    fn find_slot(&self, hash: usize, key: &K) -> (usize, Option<usize>) {
         let capacity = self.index.capacity();
         let mut slot = hash % capacity;
         let mut step = 0;
@@ -425,7 +425,7 @@ where
         let hash = self.hash(&key);
 
         // This is safe because empty slots are guaranteed to exist.
-        match self.find_slot(&hash, &key) {
+        match self.find_slot(hash, &key) {
             // A key match is found
             (_, Some(entry_index)) => {
                 // Key exists, update the value
@@ -486,7 +486,7 @@ where
     #[inline]
     pub fn get(&self, key: &K) -> Option<&V> {
         let hash = self.hash(key);
-        if let (_, Some(index)) = self.find_slot(&hash, key) {
+        if let (_, Some(index)) = self.find_slot(hash, key) {
             return Some(&self.entries[index].value);
         }
         None
@@ -530,7 +530,7 @@ where
     #[inline]
     pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
         let hash = self.hash(key);
-        if let (_, Some(index)) = self.find_slot(&hash, key) {
+        if let (_, Some(index)) = self.find_slot(hash, key) {
             return Some(&mut self.entries[index].value);
         }
         None
@@ -651,10 +651,11 @@ where
         if self.is_empty() {
             return None;
         }
+
         let hash = self.hash(key);
 
         // Find the slot of the key
-        if let (slot, Some(index)) = self.find_slot(&hash, key) {
+        if let (slot, Some(index)) = self.find_slot(hash, key) {
             let entry: Entry<K, V>;
 
             // Call remove or pop based on the index
@@ -748,7 +749,7 @@ where
             return None;
         }
         let entry = self.entries.last();
-        if let (slot, Some(_)) = self.find_slot(&entry.hash, &entry.key) {
+        if let (slot, Some(_)) = self.find_slot(entry.hash, &entry.key) {
             self.index[slot] = Slot::Deleted;
             // This is safe because the map is not empty
             let entry = self.entries.pop();
