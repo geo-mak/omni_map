@@ -161,7 +161,7 @@ impl<T> AllocVec<T> {
     ///   will cause undefined behavior.
     ///
     #[inline(always)]
-    fn allocate(&mut self, cap: usize) {
+    pub(crate) fn allocate(&mut self, cap: usize) {
         self.ptr = Self::allocate_layout(cap);
         self.cap = cap;
     }
@@ -182,7 +182,7 @@ impl<T> AllocVec<T> {
     /// - The length of the vector is not updated by this method. Accessing elements out of bounds
     ///   will cause undefined behavior.
     ///
-    fn reallocate(&mut self, cap: usize) {
+    pub(crate) fn reallocate(&mut self, cap: usize) {
         // Note: Checks are bypassed at runtime because there is no meaningful strategy to handle
         // allocation errors other than panicking. It is just too much checking for nothing.
 
@@ -254,8 +254,6 @@ impl<T> AllocVec<T> {
     ///
     #[inline]
     pub(crate) fn grow(&mut self, new_cap: usize) {
-        // TODO: Expose `allocate` and `reallocate` methods directly as unchecked alternatives.
-
         // New allocation.
         if self.cap == 0 {
             // Overflow check is done in debug mode only.
