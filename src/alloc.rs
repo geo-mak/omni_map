@@ -234,6 +234,7 @@ impl<T> AllocVec<T> {
     }
 
     /// Grows the capacity of the `AllocVec` to the specified capacity.
+    ///
     /// This method is no-op if the new capacity is less than the current capacity.
     ///
     /// # Arguments
@@ -253,6 +254,8 @@ impl<T> AllocVec<T> {
     ///
     #[inline]
     pub(crate) fn grow(&mut self, new_cap: usize) {
+        // TODO: Expose `allocate` and `reallocate` methods directly as unchecked alternatives.
+
         // New allocation.
         if self.cap == 0 {
             // Overflow check is done in debug mode only.
@@ -273,6 +276,7 @@ impl<T> AllocVec<T> {
     /// # Safety
     ///
     /// `new_cap` must be less than the current capacity and greater than or equal to the length.
+    ///
     /// These conditions are checked in debug mode only.
     ///
     /// # Arguments
@@ -296,6 +300,7 @@ impl<T> AllocVec<T> {
     /// # Safety
     ///
     /// The current capacity must be greater than the length.
+    ///
     /// This condition is checked in debug mode only.
     ///
     /// # Panics
@@ -376,6 +381,7 @@ impl<T> AllocVec<T> {
     /// # Safety
     ///
     /// `new_len` must be less than the current length.
+    ///
     /// This condition is checked in debug mode only.
     ///
     /// # Arguments
@@ -436,6 +442,7 @@ impl<T> AllocVec<T> {
     /// # Safety
     ///
     /// This method checks for out of bounds access in debug mode only.
+    ///
     /// The caller must ensure that the `AllocVec` is not empty.
     ///
     /// # Time Complexity
@@ -455,6 +462,7 @@ impl<T> AllocVec<T> {
     /// # Safety
     ///
     /// This method checks for out of bounds access in debug mode only.
+    ///
     /// The caller must ensure that the `AllocVec` is not empty.
     ///
     /// # Time Complexity
@@ -478,6 +486,7 @@ impl<T> AllocVec<T> {
     /// # Safety
     ///
     /// This method checks for out of bounds access in debug mode only.
+    ///
     /// The caller must ensure that `index` is within the bounds of the `AllocVec`.
     ///
     /// # Time Complexity
@@ -503,6 +512,7 @@ impl<T> AllocVec<T> {
     /// # Safety
     ///
     /// This method checks for out of bounds access in debug mode only.
+    ///
     /// The caller must ensure that the `AllocVec` is not empty.
     ///
     /// # Time Complexity
@@ -522,6 +532,7 @@ impl<T> AllocVec<T> {
     /// # Safety
     ///
     /// This method checks for out of bounds access in debug mode only.
+    ///
     /// The caller must ensure that the `AllocVec` is not empty.
     ///
     /// # Time Complexity
