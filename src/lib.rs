@@ -280,6 +280,11 @@ where
 
     /// Grows the capacity of the map with reindexing.
     ///
+    /// # Safety
+    ///
+    /// This method should be called only after prior allocation and after ensuring that the
+    /// `new_cap` is greater than the current capacity.
+    ///
     /// # Parameters
     ///
     /// - `new_cap`: The new capacity of the map.
@@ -291,10 +296,10 @@ where
             "Logic error: new capacity must be larger than the current capacity."
         );
 
-        // Reserve the new capacity for the entries.
-        // Note: If the new capacity isn't larger than the current capacity,
-        // the vector will not reallocate. So this call is safe even if the capacity is zero.
-        self.entries.grow(new_cap);
+        // Reallocate the entries with the new capacity.
+        // SAFETY: This call is assumed to be safe if the new capacity is greater than the current
+        // capacity.
+        self.entries.reallocate(new_cap);
         // Reset the index with the new capacity.
         self.reset_index(self.entries.capacity());
         // Rebuild the index with the new capacity.
@@ -367,7 +372,8 @@ where
         if self.index.capacity() == 0 {
             // Allocate initial capacity without reindexing.
             self.index.resize_with(1, || Slot::Empty);
-            self.entries.grow(1);
+            // Allocate initial capacity for the entries.
+            self.entries.allocate(1);
         } else {
             // This will reindex the map if the capacity is grown.
             self.maybe_grow();
