@@ -362,16 +362,21 @@ impl<T> AllocVec<T> {
             self.len = new_len;
 
         } else {
-            // Length is less than the current length
-            self.truncate(new_len)
+            // This is safe because the new length is less than the current length.
+            self.truncate_unchecked(new_len)
         };
     }
 
     /// Shortens the vector, keeping the first len elements and dropping the rest.
-    /// This method has no effect, if the vector is empty or `len` is greater or equal to the
-    /// vector's current length.
     ///
     /// Truncating when `len` == `0` is equivalent to calling the clear method.
+    ///
+    /// This method will drop all elements after the specified length.
+    ///
+    /// # Safety
+    ///
+    /// `new_len` must be less than the current length.
+    /// This condition is checked in debug mode only.
     ///
     /// # Arguments
     ///
@@ -381,18 +386,17 @@ impl<T> AllocVec<T> {
     ///
     /// _O_(n) where n is the number of elements to drop (self.len - len).
     ///
-    pub(crate) fn truncate(&mut self, len: usize) {
-        if len > self.len{
-            return;
-        }
+    pub(crate) fn truncate_unchecked(&mut self, new_len: usize) {
+        // This must be ensured by the caller.
+        debug_assert!(new_len < self.len, "New length must be less than the current length");
         unsafe {
-            let drop_elements = self.len - len;
+            let drop_elements = self.len - new_len;
             // Get a slice of the elements to drop
             let drop_slice = ptr::slice_from_raw_parts_mut(
-                self.as_mut_ptr().add(len), drop_elements
+                self.as_mut_ptr().add(new_len), drop_elements
             );
-            // Update length
-            self.len = len;
+            // Update length first
+            self.len = new_len;
             // Call drop on each element to release resources.
             ptr::drop_in_place(drop_slice);
         }
@@ -1012,6 +1016,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(debug_assertions)]
     #[should_panic(expected = "Size exceeds maximum limit on this platform")]
     fn test_alloc_vec_with_capacity_overflow() {
         let _: AllocVec<u8> = AllocVec::with_capacity(isize::MAX as usize + 1);
@@ -1041,6 +1046,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(debug_assertions)]
     #[should_panic(expected = "Size exceeds maximum limit on this platform")]
     fn test_alloc_vec_grow_capacity_overflow() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
@@ -1082,6 +1088,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(debug_assertions)]
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_index_out_of_bounds() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
@@ -1144,6 +1151,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(debug_assertions)]
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_first_out_of_bounds() {
         let alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
@@ -1159,6 +1167,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(debug_assertions)]
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_last_out_of_bounds() {
         let alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
@@ -1178,6 +1187,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(debug_assertions)]
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_pop_front_out_of_bounds() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
@@ -1193,6 +1203,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(debug_assertions)]
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_pop_out_of_bounds() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
@@ -1210,6 +1221,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(debug_assertions)]
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_remove_out_of_bounds() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
@@ -1263,49 +1275,34 @@ mod tests {
     }
 
     #[test]
-    fn test_alloc_vec_truncate() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
-
-        assert_eq!(alloc_vec.ptr.as_ptr(), 0x1 as *mut u8);
-
-        // Truncate prior to allocation (no effect)
-        alloc_vec.truncate(0);
-
-        // Allocate memory space for 3 elements
-        alloc_vec.grow(3);
+    fn test_alloc_vec_truncate_unchecked() {
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(3);
 
         assert_eq!(alloc_vec.len(), 0);
-
-        // Truncate with zero length when vector is empty (no effect)
-        alloc_vec.truncate(0);
-
-        // Truncate with non-zero length when vector is empty (no effect)
-        alloc_vec.truncate(3);
 
         // Add 2 elements
         alloc_vec.push_no_grow(1);
         alloc_vec.push_no_grow(2);
 
-        // Truncate to length greater than current length (no effect)
-        alloc_vec.truncate(3);
-        assert_eq!(alloc_vec.len(), 2);
-        assert_eq!(alloc_vec[0], 1);
-        assert_eq!(alloc_vec[1], 2);
-
-        // Truncate to length equal to current length (no effect)
-        alloc_vec.truncate(2);
-        assert_eq!(alloc_vec.len(), 2);
-        assert_eq!(alloc_vec[0], 1);
-        assert_eq!(alloc_vec[1], 2);
-
         // Truncate to length less than current length
-        alloc_vec.truncate(1);
+        alloc_vec.truncate_unchecked(1);
         assert_eq!(alloc_vec.len(), 1);
         assert_eq!(alloc_vec[0], 1);
 
         // Truncate to length 0, effectively clearing the vector
-        alloc_vec.truncate(0);
+        alloc_vec.truncate_unchecked(0);
         assert_eq!(alloc_vec.len(), 0);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "New length must be less than the current length")]
+    fn test_alloc_vec_truncate_unchecked_error() {
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(3);
+        alloc_vec.push_no_grow(1);
+        alloc_vec.push_no_grow(2);
+        // This should panic because new length is not less than current length
+        alloc_vec.truncate_unchecked(3);
     }
 
     #[test]
