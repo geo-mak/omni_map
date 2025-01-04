@@ -795,7 +795,7 @@ where
         // of elements.
         if capacity < self.index.capacity() && capacity >= self.entries.len() {
             // NOTE: This call is safe, because its conditions are checked already.
-            self.entries.shrink_to_unchecked(capacity);
+            self.entries.reallocate(capacity);
             // Reset the index with the new capacity.
             self.reset_index(capacity);
             // Rebuild the index with the new capacity.
@@ -833,7 +833,7 @@ where
         // Capacity must be greater than the number of elements.
         if self.index.capacity() > self.entries.len() {
             // NOTE: This call is safe, because its condition is checked already.
-            self.entries.shrink_to_fit_unchecked();
+            self.entries.reallocate(self.entries.len());
             // Reset the index with the new capacity.
             self.reset_index(self.entries.len());
             // Rebuild the index with the new capacity.
