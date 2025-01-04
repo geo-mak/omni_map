@@ -112,7 +112,7 @@ impl<T> AllocVec<T> {
     }
 
     /// Allocates memory space for the vector.
-    /// This method is checks for valid layout size and alignment in debug builds only.
+    /// This method checks for valid layout size and alignment in debug builds only.
     ///
     /// # Returns
     ///
@@ -285,6 +285,7 @@ impl<T> AllocVec<T> {
     ///
     #[inline(always)]
     pub(crate) fn shrink_to_unchecked(&mut self, new_cap: usize) {
+        // This must be ensured by the caller.
         debug_assert!(new_cap < self.cap, "Capacity must be less than the current capacity");
         debug_assert!(new_cap >= self.len, "Capacity must be greater than or equal to the length");
         self.reallocate(new_cap);
@@ -307,6 +308,7 @@ impl<T> AllocVec<T> {
     ///
     #[inline(always)]
     pub(crate) fn shrink_to_fit_unchecked(&mut self) {
+        // This must be ensured by the caller.
         debug_assert!(self.cap > self.len, "Capacity must be greater than the length");
         self.reallocate(self.len);
     }
@@ -414,6 +416,7 @@ impl<T> AllocVec<T> {
     ///
     #[inline]
     pub(crate) fn push_no_grow(&mut self, value: T) {
+        // This must be ensured by the caller.
         debug_assert!(self.cap != 0, "Capacity must be greater than 0");
         debug_assert!(self.len < self.cap, "Capacity overflow");
         unsafe {
@@ -438,6 +441,7 @@ impl<T> AllocVec<T> {
     #[must_use]
     #[inline]
     pub(crate) fn first(&self) -> &T {
+        // This must be ensured by the caller.
         debug_assert!(self.len > 0, "Index out of bounds");
         unsafe { &*self.ptr.as_ptr() }
     }
@@ -456,6 +460,7 @@ impl<T> AllocVec<T> {
     #[must_use]
     #[inline]
     pub(crate) fn last(&self) -> &T {
+        // This must be ensured by the caller.
         debug_assert!(self.len > 0, "Index out of bounds");
         unsafe { &*self.ptr.as_ptr().add(self.len - 1) }
     }
@@ -476,6 +481,7 @@ impl<T> AllocVec<T> {
     /// _O_(n) where n is the length of the `AllocVec` minus the index.
     ///
     pub(crate) fn remove(&mut self, index: usize) -> T {
+        // This must be ensured by the caller.
         debug_assert!(index < self.len, "Index out of bounds");
         // Update len first
         self.len -= 1;
@@ -501,6 +507,7 @@ impl<T> AllocVec<T> {
     ///
     #[inline]
     pub(crate) fn pop(&mut self) -> T {
+        // This must be ensured by the caller.
         debug_assert!(self.len > 0, "Index out of bounds");
         self.len -= 1;
         unsafe { ptr::read(self.ptr.as_ptr().add(self.len)) }
@@ -519,6 +526,7 @@ impl<T> AllocVec<T> {
     ///
     #[inline]
     pub(crate) fn pop_front(&mut self) -> T {
+        // This must be ensured by the caller.
         debug_assert!(self.len > 0, "Index out of bounds");
         let value = unsafe { ptr::read(self.ptr.as_ptr()) };
         self.len -= 1;
