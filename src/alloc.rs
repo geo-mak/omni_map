@@ -431,14 +431,28 @@ impl<T> AllocVec<T> {
     pub(crate) fn remove(&mut self, index: usize) -> T {
         // This must be ensured by the caller.
         debug_assert!(index < self.len, "Index out of bounds");
-        // Update len first
-        self.len -= 1;
         unsafe {
-            let ptr = self.ptr.as_ptr().add(index);
-            let value = ptr::read(ptr);
-            // Shift everything to fill in.
-            ptr::copy(ptr.add(1), ptr, self.len - index);
-            value // ownership is transferred to the caller
+            // infallible
+            let value;
+            {
+                // The source offset
+                let src = self.ptr.as_ptr().add(index);
+
+                // The destination offset
+                let dst = src.add(1);
+
+                // Copy value to the stack
+                value = ptr::read(src);
+
+                // Shift everything down to fill in.
+                ptr::copy(dst, src, self.len - index - 1);
+            }
+
+            // Update len
+            self.len -= 1;
+
+            // Ownership is transferred to the caller
+            value
         }
     }
 
@@ -478,12 +492,29 @@ impl<T> AllocVec<T> {
     pub(crate) fn pop_front(&mut self) -> T {
         // This must be ensured by the caller.
         debug_assert!(self.len > 0, "Index out of bounds");
-        let value = unsafe { ptr::read(self.ptr.as_ptr()) };
-        self.len -= 1;
         unsafe {
-            ptr::copy(self.ptr.as_ptr().add(1), self.ptr.as_ptr(), self.len);
+            // infallible
+            let value;
+            {
+                // The old start offset
+                let src = self.ptr.as_ptr();
+
+                // The new start offset
+                let dst = src.add(1);
+
+                // Copy value to the stack
+                value = ptr::read(src);
+
+                // Shift everything down to fill in.
+                ptr::copy(dst, src, self.len - 1);
+            }
+
+            // Update len
+            self.len -= 1;
+
+            // Ownership is transferred to the caller
+            value
         }
-        value
     }
 
     /// Replaces the value at the given index with a new value and returns the old value.
