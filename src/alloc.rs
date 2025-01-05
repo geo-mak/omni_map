@@ -294,7 +294,7 @@ impl<T> AllocVec<T> {
         F: FnMut() -> T,
     {
         // This must be ensured by the caller.
-        debug_assert!(self.cap != 0, "Capacity must be greater than 0");
+        debug_assert_ne!(self.cap, 0, "Not allocated.");
 
         // Write the value to all elements
         unsafe {
@@ -362,8 +362,8 @@ impl<T> AllocVec<T> {
     #[inline]
     pub(crate) fn push_no_grow(&mut self, value: T) {
         // This must be ensured by the caller.
-        debug_assert!(self.cap != 0, "Capacity must be greater than 0");
-        debug_assert!(self.len < self.cap, "Capacity overflow");
+        debug_assert_ne!(self.cap, 0, "Not allocated.");
+        debug_assert!(self.len < self.cap, "Capacity overflow.");
         unsafe {
             ptr::write(self.ptr.as_ptr().add(self.len), value);
         }
@@ -1022,7 +1022,7 @@ mod tests {
 
     #[test]
     #[cfg(debug_assertions)]
-    #[should_panic(expected = "Capacity must be greater than 0")]
+    #[should_panic(expected = "Not allocated.")]
     fn test_alloc_vec_memset_f_overflow() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new();
         assert_eq!(alloc_vec.capacity(), 0);
@@ -1036,6 +1036,16 @@ mod tests {
         let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
         alloc_vec.push_no_grow(1);
         assert_eq!(alloc_vec.len(), 1);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "Not allocated.")]
+    fn test_alloc_vec_push_overflow() {
+        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
+
+        // Not yet allocated, should panic
+        alloc_vec.push_no_grow(1);
     }
 
     #[test]
