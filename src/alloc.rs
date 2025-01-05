@@ -111,6 +111,24 @@ impl<T> AllocVec<T> {
         }
     }
 
+    /// Returns the capacity of the `AllocVec`.
+    #[inline]
+    pub(crate) fn capacity(&self) -> usize {
+        self.cap
+    }
+
+    /// Returns the length of the `AllocVec`.
+    #[inline]
+    pub(crate) fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Returns `true` if the `AllocVec` is empty.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
     /// Allocates memory space for the vector.
     /// This method checks for valid layout size and alignment in debug builds only.
     ///
@@ -215,24 +233,6 @@ impl<T> AllocVec<T> {
         self.cap = cap;
     }
 
-    /// Returns the capacity of the `AllocVec`.
-    #[inline]
-    pub(crate) fn capacity(&self) -> usize {
-        self.cap
-    }
-
-    /// Returns the length of the `AllocVec`.
-    #[inline]
-    pub(crate) fn len(&self) -> usize {
-        self.len
-    }
-
-    /// Returns `true` if the `AllocVec` is empty.
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
     /// Grows the capacity of the `AllocVec` to the specified capacity.
     ///
     /// This method is no-op if the new capacity is less than the current capacity.
@@ -266,6 +266,45 @@ impl<T> AllocVec<T> {
             // Overflow check is done in debug mode only.
             self.reallocate(new_cap);
         }
+    }
+
+    /// Sets all elements in the allocated memory space to the provided returned by the
+    /// function `f`, and updates the length.
+    ///
+    /// # Safety
+    ///
+    /// - This method will **not** allocate memory space, the capacity must be greater than `0`.
+    ///   This condition is checked in debug mode only.
+    ///
+    /// - Initialized elements will be overwritten **without** calling `drop`.
+    ///   This will cause memory leaks if the elements are not of trivial type,
+    ///   or not dropped properly.
+    ///
+    /// # Arguments
+    ///
+    /// `f` - The function to generate the value.
+    ///
+    /// # Time Complexity
+    ///
+    /// _O_(n) where n is current capacity of the `AllocVec`.
+    ///
+    #[inline]
+    pub(crate) fn memset_f<F>(&mut self, mut f: F)
+    where
+        F: FnMut() -> T,
+    {
+        // This must be ensured by the caller.
+        debug_assert!(self.cap != 0, "Capacity must be greater than 0");
+
+        // Write the value to all elements
+        unsafe {
+            for i in 0..self.cap {
+                ptr::write(self.ptr.as_ptr().add(i), f());
+            }
+        }
+
+        // Update length
+        self.len = self.cap;
     }
 
     /// Resizes the `AllocVec` to the specified length, using the provided function to generate
@@ -1015,6 +1054,35 @@ mod tests {
 
         // Should panic as the new capacity will overflow
         alloc_vec.grow(isize::MAX as usize + 1);
+    }
+
+    #[test]
+    fn test_alloc_vec_memset_f() {
+        let mut alloc_vec: AllocVec<u8> = AllocVec::with_capacity(10);
+        assert_eq!(alloc_vec.capacity(), 10);
+        assert_eq!(alloc_vec.len(), 0);
+
+        // Set all elements to 5
+        alloc_vec.memset_f(|| 1);
+
+        // Len was 0, so it should be updated to 10
+        assert_eq!(alloc_vec.len(), 10);
+
+        // Values were uninit, so they should be set to 5
+        for i in 0..10 {
+            assert_eq!(alloc_vec[i], 1);
+        }
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "Capacity must be greater than 0")]
+    fn test_alloc_vec_memset_f_overflow() {
+        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
+        assert_eq!(alloc_vec.capacity(), 0);
+
+        // Not yet allocated, should panic
+        alloc_vec.memset_f(|| 5);
     }
 
     #[test]
