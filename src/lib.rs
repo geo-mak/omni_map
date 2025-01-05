@@ -370,8 +370,10 @@ where
     fn ensure_capacity(&mut self) {
         // Ensure that the map has enough capacity to insert the new key-value pair.
         if self.index.capacity() == 0 {
-            // Allocate initial capacity without reindexing.
-            self.index.resize_with(1, || Slot::Empty);
+            // Allocate initial capacity for the index.
+            self.index.allocate(1);
+            // Fill the index with empty slots.
+            self.index.memset_f(Slot::default);
             // Allocate initial capacity for the entries.
             self.entries.allocate(1);
         } else {
