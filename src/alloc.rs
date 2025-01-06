@@ -312,15 +312,13 @@ impl<T> AllocVec<T> {
     /// Sets all elements in the allocated memory space to the default value of `T`.
     /// The length will be updated to the current capacity.
     ///
+    /// If no memory is allocated, this method will do nothing.
+    ///
     /// # Safety
     ///
-    /// - This method will **not** allocate memory space, the capacity must be greater than `0`.
-    ///   Calling this method without allocating memory space will cause termination with `SIGSEGV`.
-    ///   This condition is checked in debug mode only.
-    ///
-    /// - Initialized elements will be overwritten **without** calling `drop`.
-    ///   This will cause memory leaks if the elements are not of trivial type,
-    ///   or not dropped properly.
+    /// Initialized elements will be overwritten **without** calling `drop`.
+    /// This will cause memory leaks if the elements are not of trivial type,
+    /// or not dropped properly.
     ///
     /// # Time Complexity
     ///
@@ -330,9 +328,6 @@ impl<T> AllocVec<T> {
     pub(crate) fn memset_default(&mut self)
     where T: Default
     {
-        // This must be ensured by the caller.
-        debug_assert_ne!(self.cap, 0, "Not allocated.");
-
         // Write the value to all elements
         unsafe {
             for i in 0..self.cap {
@@ -1060,17 +1055,6 @@ mod tests {
         for i in 0..10 {
             assert!(matches!(alloc_vec[i], Choice::Default))
         }
-    }
-
-    #[test]
-    #[cfg(debug_assertions)]
-    #[should_panic(expected = "Not allocated.")]
-    fn test_alloc_vec_memset_f_overflow() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
-        assert_eq!(alloc_vec.capacity(), 0);
-
-        // Not yet allocated, should panic
-        alloc_vec.memset_default();
     }
 
     #[test]
