@@ -101,7 +101,7 @@ impl<T> AllocVec<T> {
     /// No memory is allocated until elements are pushed onto the vector.
     #[must_use]
     #[inline]
-    pub(crate) fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         // New dangling vector
         AllocVec {
             ptr: ptr::null(),
@@ -184,19 +184,19 @@ impl<T> AllocVec<T> {
 
     /// Returns the capacity of the `AllocVec`.
     #[inline]
-    pub(crate) fn capacity(&self) -> usize {
+    pub(crate) const fn capacity(&self) -> usize {
         self.cap
     }
 
     /// Returns the length of the `AllocVec`.
     #[inline]
-    pub(crate) fn len(&self) -> usize {
+    pub(crate) const fn len(&self) -> usize {
         self.len
     }
 
     /// Returns `true` if the `AllocVec` is empty.
     #[inline]
-    pub fn is_empty(&self) -> bool {
+    pub(crate) const fn is_empty(&self) -> bool {
         self.len == 0
     }
 
