@@ -314,8 +314,7 @@ impl<T> AllocVec<T> {
         }
     }
 
-    /// Sets all elements in the allocated memory space to the provided returned by the
-    /// function `f`, and updates the length.
+    /// Sets all elements in the allocated memory space to the default value of `T`.
     ///
     /// # Safety
     ///
@@ -326,18 +325,13 @@ impl<T> AllocVec<T> {
     ///   This will cause memory leaks if the elements are not of trivial type,
     ///   or not dropped properly.
     ///
-    /// # Arguments
-    ///
-    /// `f` - The function to generate the value.
-    ///
     /// # Time Complexity
     ///
     /// _O_(n) where n is current capacity of the `AllocVec`.
     ///
     #[inline]
-    pub(crate) fn memset_f<F>(&mut self, mut f: F)
-    where
-        F: FnMut() -> T,
+    pub(crate) fn memset_default(&mut self)
+    where T: Default
     {
         // This must be ensured by the caller.
         debug_assert_ne!(self.cap, 0, "Not allocated.");
@@ -345,7 +339,7 @@ impl<T> AllocVec<T> {
         // Write the value to all elements
         unsafe {
             for i in 0..self.cap {
-                ptr::write(self.ptr.as_ptr().add(i), f());
+                ptr::write(self.ptr.as_ptr().add(i), T::default());
             }
         }
 
@@ -1034,20 +1028,32 @@ mod tests {
     }
 
     #[test]
-    fn test_alloc_vec_memset_f() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
+    fn test_alloc_vec_memset_default() {
+        #[allow(dead_code)]
+        enum Choice {
+            Custom,
+            Default,
+        }
+
+        impl Default for Choice {
+            fn default() -> Self {
+                Choice::Default
+            }
+        }
+
+        let mut alloc_vec: AllocVec<Choice> = AllocVec::new_allocate(10);
         assert_eq!(alloc_vec.capacity(), 10);
         assert_eq!(alloc_vec.len(), 0);
 
-        // Set all elements to 5
-        alloc_vec.memset_f(|| 1);
+        // Set all elements to the default value of `Choice`
+        alloc_vec.memset_default();
 
         // Len was 0, so it should be updated to 10
         assert_eq!(alloc_vec.len(), 10);
 
-        // Values were uninit, so they should be set to 5
+        // Values were uninit, so they should be set to `Default`
         for i in 0..10 {
-            assert_eq!(alloc_vec[i], 1);
+            assert!(matches!(alloc_vec[i], Choice::Default))
         }
     }
 
@@ -1059,7 +1065,7 @@ mod tests {
         assert_eq!(alloc_vec.capacity(), 0);
 
         // Not yet allocated, should panic
-        alloc_vec.memset_f(|| 5);
+        alloc_vec.memset_default();
     }
 
     #[test]

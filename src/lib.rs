@@ -373,7 +373,7 @@ where
             // Allocate initial capacity for the index.
             self.index.allocate(1);
             // Fill the index with empty slots.
-            self.index.memset_f(Slot::default);
+            self.index.memset_default();
             // Allocate initial capacity for the entries.
             self.entries.allocate(1);
         } else {
