@@ -249,35 +249,38 @@ impl<T> AllocVec<T> {
         self.cap = cap;
     }
 
-    /// Reallocates the vector to a new capacity.
+    /// Shrinks or grows the allocated memory space to the specified capacity.
     ///
     /// # Safety
     ///
-    /// - `cap`, when rounded up to the nearest multiple of `align`, must be less than or
+    /// - Pointer must be allocated and the current capacity must be greater than `0`.
+    ///   This condition is checked in debug mode only.
+    ///
+    /// - `new_cap`, when rounded up to the nearest multiple of `align`, must be less than or
     ///   equal to `isize::MAX`.
+    ///   This condition is checked in debug mode only.
     ///
-    /// - This method will reallocate memory with the valid pointer of the old layout.
-    ///   Calling this method with dangling pointer will cause termination with `SIGABRT`.
+    /// - `new_cap` must be greater than or equal to the current length.
+    ///   Reallocating capacity less than the current length might cause memory leaks, as the
+    ///   elements will be out of bounds without being dropped properly.
+    ///   This condition is checked in debug mode only.
     ///
-    /// - If the new capacity is less than the current length, the elements at the end of the
-    ///   vector will not be dropped. This will cause memory leaks.
-    ///
-    /// - The length of the vector is not updated by this method. Accessing elements out of bounds
-    ///   will cause undefined behavior.
-    ///
-    pub(crate) fn reallocate(&mut self, cap: usize) {
+    pub(crate) fn reallocate(&mut self, new_cap: usize) {
         #[cfg(debug_assertions)]
         debug_assert_allocated(self);
 
-        // Note: Checks are bypassed at runtime because there is no meaningful strategy to handle
-        // allocation errors other than panicking. It is just too much checking for nothing.
+        // Reallocating capacity less than the current length is not allowed.
+        debug_assert!(
+            new_cap >= self.len,
+            "New capacity must be greater than or equal to the current length."
+        );
 
         let t_size = size_of::<T>(); // Size of T, const
         let t_align = align_of::<T>(); // Alignment of T, const
 
         // New size
         let new_size = unsafe {
-            cap.unchecked_mul(t_size)
+            new_cap.unchecked_mul(t_size)
         };
 
         // Debug-mode check for the new layout
@@ -304,7 +307,7 @@ impl<T> AllocVec<T> {
 
         // Update the pointer and capacity
         self.ptr = new_ptr;
-        self.cap = cap;
+        self.cap = new_cap;
     }
 
     /// Sets all elements in the allocated memory space to the default value of `T`.
@@ -1132,6 +1135,51 @@ mod tests {
     #[should_panic(expected = "Size exceeds maximum limit on this platform")]
     fn test_alloc_vec_new_allocate_default_overflow() {
         let _: AllocVec<u8> = AllocVec::new_allocate_default(isize::MAX as usize + 1);
+    }
+
+    #[test]
+    fn test_alloc_vec_reallocate() {
+        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
+        assert_eq!(alloc_vec.capacity(), 3);
+
+        alloc_vec.push_no_grow(1);
+        alloc_vec.push_no_grow(2);
+        alloc_vec.push_no_grow(3);
+
+        assert_eq!(alloc_vec.len(), 3);
+
+        // Grows the capacity to 5
+        alloc_vec.reallocate(5);
+
+        assert_eq!(alloc_vec.capacity(), 5);
+
+        // Check values after reallocation
+        for i in 0..3 {
+            assert_eq!(alloc_vec[i], i as u8 + 1);
+        }
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "Pointer must not be null.")]
+    fn test_alloc_vec_reallocate_null_ptr() {
+        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
+
+        // Not yet allocated, should panic
+        alloc_vec.reallocate(10);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "New capacity must be greater than or equal to the current length")]
+    fn test_alloc_vec_reallocate_less_than_len() {
+        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
+        alloc_vec.push_no_grow(1);
+        alloc_vec.push_no_grow(2);
+        alloc_vec.push_no_grow(3);
+
+        // New capacity is less than the current length, should panic
+        alloc_vec.reallocate(2);
     }
 
     #[test]
