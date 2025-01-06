@@ -140,7 +140,6 @@ impl<T> AllocVec<T> {
         instance.allocate(cap);
 
         // Return the new instance
-
         instance
     }
 
@@ -991,6 +990,7 @@ mod tests {
     #[test]
     fn test_alloc_vec_new() {
         let alloc_vec: AllocVec<u8> = AllocVec::new();
+
         assert!(alloc_vec.ptr.is_null());
         assert_eq!(alloc_vec.capacity(), 0);
         assert_eq!(alloc_vec.len(), 0);
@@ -999,7 +999,20 @@ mod tests {
     #[test]
     fn test_alloc_vec_new_allocate() {
         let alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
+
+        assert!(!alloc_vec.ptr.is_null());
         assert_eq!(alloc_vec.capacity(), 10);
+        assert_eq!(alloc_vec.len(), 0);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    fn test_alloc_vec_new_allocate_zero_cap() {
+        let alloc_vec: AllocVec<u8> = AllocVec::new_allocate(0);
+
+        // Capacity is 0, no allocation should have been made
+        assert!(alloc_vec.ptr.is_null());
+        assert_eq!(alloc_vec.capacity(), 0);
         assert_eq!(alloc_vec.len(), 0);
     }
 
@@ -1052,41 +1065,26 @@ mod tests {
         alloc_vec.allocate(1);
 
         assert!(!alloc_vec.ptr.is_null());
-        assert!(alloc_vec.capacity() > 0);
+        assert_eq!(alloc_vec.capacity(), 1);
 
         // Already allocated, should panic
         alloc_vec.allocate(2);
     }
 
-    #[test]
-    fn test_alloc_vec_new_allocate_and_populate() {
-        let capacity = 5;
-        let alloc_vec: AllocVec<u8> = AllocVec::new_allocate_default(capacity);
+    #[allow(dead_code)]
+    enum Choice {
+        Custom,
+        Default,
+    }
 
-        // Map's length and capacity must be equal to the specified capacity
-        assert_eq!(alloc_vec.len(), capacity);
-        assert_eq!(alloc_vec.capacity(), capacity);
-
-        // All elements are must have been initialized to their default values
-        for i in 0..capacity {
-            assert_eq!(alloc_vec[i], u8::default());
+    impl Default for Choice {
+        fn default() -> Self {
+            Choice::Default
         }
     }
 
     #[test]
     fn test_alloc_vec_memset_default() {
-        #[allow(dead_code)]
-        enum Choice {
-            Custom,
-            Default,
-        }
-
-        impl Default for Choice {
-            fn default() -> Self {
-                Choice::Default
-            }
-        }
-
         let mut alloc_vec: AllocVec<Choice> = AllocVec::new_allocate(10);
         assert_eq!(alloc_vec.capacity(), 10);
         assert_eq!(alloc_vec.len(), 0);
@@ -1104,10 +1102,47 @@ mod tests {
     }
 
     #[test]
+    fn test_alloc_vec_new_allocate_default() {
+        let capacity = 5;
+        let alloc_vec: AllocVec<Choice> = AllocVec::new_allocate_default(capacity);
+
+        // Memory space should have been allocated
+        assert!(!alloc_vec.ptr.is_null());
+        assert_eq!(alloc_vec.capacity(), capacity);
+        assert_eq!(alloc_vec.len(), capacity);
+
+        // All elements are must have been initialized to their default values
+        for i in 0..capacity {
+            assert!(matches!(alloc_vec[i], Choice::Default))
+        }
+    }
+
+    #[test]
+    fn test_alloc_vec_new_allocate_default_zero_cap() {
+        let alloc_vec: AllocVec<u8> = AllocVec::new_allocate_default(0);
+
+        // Capacity is 0, no allocation should have been made
+        assert!(alloc_vec.ptr.is_null());
+        assert_eq!(alloc_vec.capacity(), 0);
+        assert_eq!(alloc_vec.len(), 0);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "Size exceeds maximum limit on this platform")]
+    fn test_alloc_vec_new_allocate_default_overflow() {
+        let _: AllocVec<u8> = AllocVec::new_allocate_default(isize::MAX as usize + 1);
+    }
+
+    #[test]
     fn test_alloc_vec_push() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(1);
+        alloc_vec.push_no_grow(2);
         assert_eq!(alloc_vec.len(), 1);
+
+        let pushed_value = unsafe { *alloc_vec.ptr };
+
+        assert_eq!(pushed_value, 2);
     }
 
     #[test]
@@ -1136,6 +1171,7 @@ mod tests {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
         alloc_vec.push_no_grow(10);
 
+        // Index out of bounds, should panic
         let _ = alloc_vec[1];
     }
 
