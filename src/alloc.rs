@@ -41,6 +41,21 @@ fn debug_assert_allocated<T>(instance: &AllocVec<T>) {
     assert_ne!(instance.cap, 0, "Capacity must not be zero.");
 }
 
+/// Debug-mode check to check the allocation state.
+/// This function is only available in debug builds.
+///
+/// Conditions:
+///
+/// - The pointer must be null.
+///
+/// - The capacity must be `0`.
+///
+#[cfg(debug_assertions)]
+fn debug_assert_not_allocated<T>(instance: &AllocVec<T>) {
+    assert!(instance.ptr.is_null(), "Pointer must be null.");
+    assert_eq!(instance.cap, 0, "Capacity must be zero.");
+}
+
 /// Raw allocation buffer to enable better control over memory allocation.
 ///
 /// This buffer uses the registered `global allocator` to allocate memory.
@@ -113,17 +128,20 @@ impl<T> AllocVec<T> {
     #[must_use]
     #[inline]
     pub(crate) fn new_allocate(cap: usize) -> Self {
-        if cap == 0 {
-            return Self::new();
-        }
+        // New instance with no allocation
+        let mut instance = Self::new();
 
-        // New allocated vector
-        AllocVec {
-            ptr: Self::allocate_layout(cap),
-            cap,
-            len: 0,
-            _marker: PhantomData,
-        }
+        // No allocation required
+        if cap == 0 {
+            return instance;
+        };
+
+        // Allocate memory space
+        instance.allocate(cap);
+
+        // Return the new instance
+
+        instance
     }
 
     /// Creates a new `AllocVec` with the specified capacity and populates it with the default
@@ -147,29 +165,22 @@ impl<T> AllocVec<T> {
     pub(crate) fn new_allocate_default(cap: usize) -> Self
     where T: Default
     {
+        // New instance with no allocation
+        let mut instance = Self::new();
 
         // No allocation required
         if cap == 0 {
-            return Self::new();
+            return instance;
         }
 
-        // Allocate layout
-        let ptr = Self::allocate_layout(cap);
+        // Allocate memory space
+        instance.allocate(cap);
 
-        // Initialize elements with default values
-        unsafe {
-            for i in 0..cap {
-                ptr::write(ptr.add(i), T::default());
-            }
-        }
+        // Set all elements to the default value of T
+        instance.memset_default();
 
-        // New allocated vector
-        AllocVec {
-            ptr,
-            cap,
-            len: cap,
-            _marker: PhantomData,
-        }
+        // Return the new instance
+        instance
     }
 
     /// Returns the capacity of the `AllocVec`.
@@ -190,23 +201,29 @@ impl<T> AllocVec<T> {
         self.len == 0
     }
 
-    /// Allocates memory space for the vector.
-    /// This method checks for valid layout size and alignment in debug builds only.
+    /// Allocates memory space for the `AllocVec`.
     ///
-    /// # Returns
+    /// # Safety
     ///
-    /// - `NonNull<T>`: A non-null pointer to the allocated memory space.
+    /// - Pointer must be `null` and the current capacity must be `0`.
+    ///   This method doesn't deallocate the old memory space pointed by the pointer.
+    ///   Calling this method with a non-null pointer will cause memory leaks.
+    ///   This condition is checked in debug mode only.
     ///
-    /// # Panics
+    /// - `cap` must be greater than `0`.
+    ///   This condition is checked in debug mode only.
     ///
-    /// - When `cap` rounded up to the nearest multiple of `align` overflows `isize::MAX`.
+    /// - `cap`, when rounded up to the nearest multiple of `align`, must be less than or
+    ///   equal to `isize::MAX`.
+    ///   This condition is checked in debug mode only.
     ///
-    /// - When the allocator refuses to allocate memory space, this can happen when the system is
-    ///   out of memory or the size of the requested block is too large.
-    ///
-    fn allocate_layout(cap: usize) -> *mut T {
-        // Note: Checks are bypassed at runtime because there is no meaningful strategy to handle
-        // allocation errors other than panicking. It is just too much checking for nothing.
+    pub(crate) fn allocate(&mut self, cap: usize) {
+        // Pointer must be null and the current capacity must be 0
+        #[cfg(debug_assertions)]
+        debug_assert_not_allocated(self);
+
+        // Not allowed to allocate zero capacity
+        debug_assert_ne!(cap, 0, "Requested capacity must be greater than 0");
 
         // New layout
         let layout = unsafe {
@@ -228,26 +245,8 @@ impl<T> AllocVec<T> {
             alloc::handle_alloc_error(layout);
         }
 
-        // Return the pointer
-        ptr
-    }
-
-    /// Allocates the vector to a new capacity.
-    ///
-    /// # Safety
-    ///
-    /// - `cap`, when rounded up to the nearest multiple of `align`, must be less than or
-    ///   equal to `isize::MAX`.
-    ///
-    /// - This method will allocate memory for the new capacity without dropping the old elements.
-    ///   Calling this method without dropping the old elements will cause memory leaks.
-    ///
-    /// - The length of the vector is not updated by this method. Accessing elements out of bounds
-    ///   will cause undefined behavior.
-    ///
-    #[inline(always)]
-    pub(crate) fn allocate(&mut self, cap: usize) {
-        self.ptr = Self::allocate_layout(cap);
+        // Update the pointer and capacity
+        self.ptr = ptr;
         self.cap = cap;
     }
 
@@ -941,17 +940,16 @@ impl<T: Clone> AllocVec<T> {
             _marker: PhantomData,
         };
 
+        // No allocation required either way
         if self.cap == 0 || (compact && self.len == 0) {
-            // No allocation required either way
             return new_vec;
         }
 
         // cap here must be greater than 0 either way (self.cap or self.len)
         let cap = if compact { self.len } else { self.cap };
 
-        // Set the new pointer and capacity
-        new_vec.ptr = Self::allocate_layout(cap);
-        new_vec.cap = cap;
+        // Allocate memory space
+        new_vec.allocate(cap);
 
         // Clone elements
         unsafe {
@@ -1010,6 +1008,54 @@ mod tests {
     #[should_panic(expected = "Size exceeds maximum limit on this platform")]
     fn test_alloc_vec_new_allocate_overflow() {
         let _: AllocVec<u8> = AllocVec::new_allocate(isize::MAX as usize + 1);
+    }
+
+    #[test]
+    fn test_alloc_vec_allocate() {
+        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
+
+        // Allocate memory space
+        alloc_vec.allocate(10);
+
+        assert!(!alloc_vec.ptr.is_null());
+        assert_eq!(alloc_vec.capacity(), 10);
+        assert_eq!(alloc_vec.len(), 0);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "Requested capacity must be greater than 0")]
+    fn test_alloc_vec_allocate_zero_cap() {
+        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
+
+        // Capacity must be greater than 0, should panic
+        alloc_vec.allocate(0);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "Size exceeds maximum limit on this platform")]
+    fn test_alloc_vec_allocate_overflow() {
+        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
+
+        // Size exceeds maximum limit, should panic
+        alloc_vec.allocate(isize::MAX as usize + 1);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "Pointer must be null.")]
+    fn test_alloc_vec_allocate_allocated() {
+        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
+
+        // Not yet allocated, should not panic
+        alloc_vec.allocate(1);
+
+        assert!(!alloc_vec.ptr.is_null());
+        assert!(alloc_vec.capacity() > 0);
+
+        // Already allocated, should panic
+        alloc_vec.allocate(2);
     }
 
     #[test]
