@@ -279,41 +279,6 @@ impl<T> AllocVec<T> {
         self.cap = cap;
     }
 
-    /// Grows the capacity of the `AllocVec` to the specified capacity.
-    ///
-    /// This method is no-op if the new capacity is less than the current capacity.
-    ///
-    /// # Arguments
-    ///
-    /// - `new_cap` - The new capacity of the `AllocVec`.
-    ///
-    /// # Safety
-    ///
-    /// `new_cap`, when rounded up to the nearest multiple of `align`, must be less than or equal
-    /// to `isize::MAX`.
-    ///
-    /// The check for overflow is done in debug mode only.
-    ///
-    /// # Time Complexity
-    ///
-    /// _O_(n) where n is the new capacity.
-    ///
-    #[inline]
-    pub(crate) fn grow(&mut self, new_cap: usize) {
-        // New allocation.
-        if self.cap == 0 {
-            // Overflow check is done in debug mode only.
-            self.allocate(new_cap);
-            return;
-        }
-
-        // Reallocation.
-        if new_cap > self.cap {
-            // Overflow check is done in debug mode only.
-            self.reallocate(new_cap);
-        }
-    }
-
     /// Sets all elements in the allocated memory space to the default value of `T`.
     /// The length will be updated to the current capacity.
     ///
@@ -1015,25 +980,6 @@ mod tests {
     }
 
     #[test]
-    fn test_alloc_vec_grow() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        assert_eq!(alloc_vec.capacity(), 10);
-        alloc_vec.grow(15);
-        assert_eq!(alloc_vec.capacity(), 15);
-    }
-
-    #[test]
-    #[cfg(debug_assertions)]
-    #[should_panic(expected = "Size exceeds maximum limit on this platform")]
-    fn test_alloc_vec_grow_capacity_overflow() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        assert_eq!(alloc_vec.capacity(), 10);
-
-        // Should panic as the new capacity will overflow
-        alloc_vec.grow(isize::MAX as usize + 1);
-    }
-
-    #[test]
     fn test_alloc_vec_memset_default() {
         #[allow(dead_code)]
         enum Choice {
@@ -1520,7 +1466,7 @@ mod tests {
         let mut cloned = cloned; // make mutable
 
         // Increase the capacity of the clone by 1
-        cloned.grow(4);
+        cloned.reallocate(4);
 
         // Compare the capacities of the clone and the original
         assert_eq!(cloned.capacity(), original.len() + 1);
