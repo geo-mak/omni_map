@@ -1,7 +1,7 @@
 use std::alloc::{self, alloc, Layout};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Index, IndexMut, Range};
-use std::ptr::{self, NonNull};
+use std::ptr;
 use std::fmt::Debug;
 
 /// Debug-mode check for the layout size and alignment.
@@ -24,6 +24,21 @@ fn debug_layout_size_align(size: usize, align: usize) {
     // Size check
     let max_size = (isize::MAX as usize + 1) - align;
     assert!(max_size > size , "Size exceeds maximum limit on this platform");
+}
+
+/// Debug-mode check to check the allocation state.
+/// This function is only available in debug builds.
+///
+/// Conditions:
+///
+/// - The pointer must not be null.
+///
+/// - The capacity must not be `0`.
+///
+#[cfg(debug_assertions)]
+fn debug_assert_allocated<T>(instance: &AllocVec<T>) {
+    assert!(!instance.ptr.is_null(), "Pointer must not be null.");
+    assert_ne!(instance.cap, 0, "Capacity must not be zero.");
 }
 
 /// Raw allocation buffer to enable better control over memory allocation.
@@ -59,7 +74,7 @@ fn debug_layout_size_align(size: usize, align: usize) {
 ///
 /// ```
 pub(crate) struct AllocVec<T> {
-    ptr: NonNull<T>,
+    ptr: *const T,
     cap: usize,
     len: usize,
     _marker: PhantomData<T>,
@@ -74,7 +89,7 @@ impl<T> AllocVec<T> {
     pub(crate) fn new() -> Self {
         // New dangling vector
         AllocVec {
-            ptr: NonNull::dangling(),
+            ptr: ptr::null(),
             cap: 0,
             len: 0,
             _marker: PhantomData,
@@ -144,7 +159,7 @@ impl<T> AllocVec<T> {
         // Initialize elements with default values
         unsafe {
             for i in 0..cap {
-                ptr::write(ptr.as_ptr().add(i), T::default());
+                ptr::write(ptr.add(i), T::default());
             }
         }
 
@@ -189,7 +204,7 @@ impl<T> AllocVec<T> {
     /// - When the allocator refuses to allocate memory space, this can happen when the system is
     ///   out of memory or the size of the requested block is too large.
     ///
-    fn allocate_layout(cap: usize) -> NonNull<T> {
+    fn allocate_layout(cap: usize) -> *mut T {
         // Note: Checks are bypassed at runtime because there is no meaningful strategy to handle
         // allocation errors other than panicking. It is just too much checking for nothing.
 
@@ -205,10 +220,16 @@ impl<T> AllocVec<T> {
         };
 
         // Allocate memory space
-        let ptr = unsafe { alloc(layout) as *mut T };
+        let ptr  = unsafe { alloc(layout) as *mut T };
 
-        // Return a non-null pointer
-        NonNull::new(ptr).expect("Allocation refused.")
+        // Check if allocation failed
+        if ptr.is_null() {
+            // Allocation failed
+            alloc::handle_alloc_error(layout);
+        }
+
+        // Return the pointer
+        ptr
     }
 
     /// Allocates the vector to a new capacity.
@@ -247,6 +268,9 @@ impl<T> AllocVec<T> {
     ///   will cause undefined behavior.
     ///
     pub(crate) fn reallocate(&mut self, cap: usize) {
+        #[cfg(debug_assertions)]
+        debug_assert_allocated(self);
+
         // Note: Checks are bypassed at runtime because there is no meaningful strategy to handle
         // allocation errors other than panicking. It is just too much checking for nothing.
 
@@ -271,11 +295,17 @@ impl<T> AllocVec<T> {
 
         // Reallocate memory space
         let new_ptr = unsafe {
-            alloc::realloc(self.ptr.as_ptr() as *mut u8, current_layout, new_size) as *mut T
+            alloc::realloc(self.ptr as *mut u8, current_layout, new_size) as *mut T
         };
 
+        // Check if reallocation failed
+        if new_ptr.is_null() {
+            // Reallocate failed
+            alloc::handle_alloc_error(current_layout);
+        }
+
         // Update the pointer and capacity
-        self.ptr = NonNull::new(new_ptr).expect("Reallocation refused.");
+        self.ptr = new_ptr;
         self.cap = cap;
     }
 
@@ -306,7 +336,7 @@ impl<T> AllocVec<T> {
         // Write the value to all elements
         unsafe {
             for i in 0..self.cap {
-                ptr::write(self.ptr.as_ptr().add(i), T::default());
+                ptr::write((self.ptr as *mut T).add(i), T::default());
             }
         }
 
@@ -373,10 +403,12 @@ impl<T> AllocVec<T> {
     #[inline]
     pub(crate) fn push_no_grow(&mut self, value: T) {
         // This must be ensured by the caller.
-        debug_assert_ne!(self.cap, 0, "Not allocated.");
+        #[cfg(debug_assertions)]
+        debug_assert_allocated(self);
         debug_assert!(self.len < self.cap, "Capacity overflow.");
+
         unsafe {
-            ptr::write(self.ptr.as_ptr().add(self.len), value);
+            ptr::write((self.ptr as *mut T).add(self.len), value);
         }
         // Update length
         self.len += 1;
@@ -400,7 +432,7 @@ impl<T> AllocVec<T> {
     pub(crate) fn first(&self) -> &T {
         // This must be ensured by the caller.
         debug_assert!(self.len > 0, "Index out of bounds");
-        unsafe { &*self.ptr.as_ptr() }
+        unsafe { &*self.ptr }
     }
 
     /// Returns a reference to the last element.
@@ -420,7 +452,7 @@ impl<T> AllocVec<T> {
     pub(crate) fn last(&self) -> &T {
         // This must be ensured by the caller.
         debug_assert!(self.len > 0, "Index out of bounds");
-        unsafe { &*self.ptr.as_ptr().add(self.len - 1) }
+        unsafe { &*self.ptr.add(self.len - 1) }
     }
 
     /// Removes and returns the element at the specified index.
@@ -447,7 +479,7 @@ impl<T> AllocVec<T> {
             let value;
             {
                 // The source offset
-                let src = self.ptr.as_ptr().add(index);
+                let src = (self.ptr as *mut T).add(index);
 
                 // The destination offset
                 let dst = src.add(1);
@@ -484,7 +516,7 @@ impl<T> AllocVec<T> {
         // This must be ensured by the caller.
         debug_assert!(self.len > 0, "Index out of bounds");
         self.len -= 1;
-        unsafe { ptr::read(self.ptr.as_ptr().add(self.len)) }
+        unsafe { ptr::read(self.ptr.add(self.len)) }
     }
 
     /// Removes the first element and returns it.
@@ -508,7 +540,7 @@ impl<T> AllocVec<T> {
             let value;
             {
                 // The old start offset
-                let src = self.ptr.as_ptr();
+                let src = self.ptr as *mut T;
 
                 // The new start offset
                 let dst = src.add(1);
@@ -549,7 +581,7 @@ impl<T> AllocVec<T> {
         // This must be release-mode check because the exposing API is expected to be the same.
         assert!(index < self.len, "Index out of bounds");
         unsafe {
-            let ptr = self.ptr.as_ptr().add(index);
+            let ptr = (self.ptr as *mut T).add(index);
             ptr::replace(ptr, new_value)
         }
     }
@@ -576,8 +608,8 @@ impl<T> AllocVec<T> {
         assert!(index1 < self.len, "Index1 out of bounds");
         assert!(index2 < self.len, "Index2 out of bounds");
         unsafe {
-            let ptr1 = self.ptr.as_ptr().add(index1);
-            let ptr2 = self.ptr.as_ptr().add(index2);
+            let ptr1 = (self.ptr as *mut T).add(index1);
+            let ptr2 = (self.ptr as *mut T).add(index2);
             ptr::swap(ptr1, ptr2);
         }
     }
@@ -600,7 +632,7 @@ impl<T> AllocVec<T> {
     pub(crate) fn chunks(&self, chunk_size: usize) -> std::slice::Chunks<'_, T> {
         // This must be release-mode check because the exposing API is expected to be the same.
         assert!(chunk_size > 0, "Chunk size must be greater than 0");
-        unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len).chunks(chunk_size) }
+        unsafe { std::slice::from_raw_parts(self.ptr, self.len).chunks(chunk_size) }
     }
 
     /// Returns an iterator over the mutable chunks of the `AllocVec`.
@@ -622,11 +654,16 @@ impl<T> AllocVec<T> {
         // This must be release-mode check because the exposing API is expected to be the same.
         assert!(chunk_size > 0, "Chunk size must be greater than 0");
         unsafe {
-            std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len).chunks_mut(chunk_size)
+            std::slice::from_raw_parts_mut(self.ptr as *mut T, self.len).chunks_mut(chunk_size)
         }
     }
 
     /// Returns an iterator over the elements of the `AllocVec`.
+    /// If the `AllocVec` is empty, the iterator will return an empty slice.
+    ///
+    /// # Safety
+    ///
+    /// This method is safe to call even if the pointer is null.
     ///
     /// # Time Complexity
     ///
@@ -634,10 +671,19 @@ impl<T> AllocVec<T> {
     ///
     #[inline]
     pub(crate) fn iter(&self) -> std::slice::Iter<'_, T> {
-        unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len).iter() }
+        if self.len == 0 {
+            [].iter()
+        } else {
+            unsafe { std::slice::from_raw_parts(self.ptr, self.len).iter() }
+        }
     }
 
     /// Returns a mutable iterator over the elements of the `AllocVec`.
+    /// If the `AllocVec` is empty, the iterator will return an empty slice.
+    ///
+    /// # Safety
+    ///
+    /// This method is safe to call even if the pointer is null.
     ///
     /// # Time Complexity
     ///
@@ -645,7 +691,11 @@ impl<T> AllocVec<T> {
     ///
     #[inline]
     pub(crate) fn iter_mut(&mut self) -> std::slice::IterMut<'_, T> {
-        unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len).iter_mut() }
+        if self.len == 0 {
+            [].iter_mut()
+        } else {
+            unsafe { std::slice::from_raw_parts_mut(self.ptr as *mut T, self.len).iter_mut() }
+        }
     }
 
     /// Clears the `AllocVec` and calls `drop` on elements.
@@ -661,7 +711,7 @@ impl<T> AllocVec<T> {
             self.len = 0;
             unsafe {
                 // Call drop on each element to release resources.
-                ptr::drop_in_place(std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len));
+                ptr::drop_in_place(std::slice::from_raw_parts_mut(self.ptr as *mut T, self.len));
             }
         }
     }
@@ -689,7 +739,7 @@ impl<T> AllocVec<T> {
 impl<T> Drop for AllocVec<T> {
     /// Calls drop on each element and deallocates the memory space.
     fn drop(&mut self) {
-        if self.cap != 0 {
+        if !self.ptr.is_null() {
             unsafe {
                 // Already checked in the `allocate_layout` function.
                 // `size_of` and `align_of` are const.
@@ -698,9 +748,9 @@ impl<T> Drop for AllocVec<T> {
                     align_of::<T>()
                 );
                 // Call drop on each element to release their resources.
-                ptr::drop_in_place(std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len));
+                ptr::drop_in_place(std::slice::from_raw_parts_mut(self.ptr as *mut T, self.len));
                 // Deallocate memory space.
-                alloc::dealloc(self.ptr.as_ptr() as *mut u8, layout);
+                alloc::dealloc(self.ptr as *mut u8, layout);
             }
         }
     }
@@ -731,7 +781,7 @@ impl<T> Index<usize> for AllocVec<T> {
     fn index(&self, index: usize) -> &Self::Output {
         // This must be release-mode check because the exposing API is expected to be the same.
         assert!(index < self.len, "Index out of bounds");
-        unsafe { &*self.ptr.as_ptr().add(index) }
+        unsafe { &*self.ptr.add(index) }
     }
 }
 
@@ -749,7 +799,7 @@ impl<T> IndexMut<usize> for AllocVec<T> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         // This must be release-mode check because the exposing API is expected to be the same.
         assert!(index < self.len, "Index out of bounds");
-        unsafe { &mut *self.ptr.as_ptr().add(index) }
+        unsafe { &mut *(self.ptr as *mut T).add(index) }
     }
 }
 
@@ -764,7 +814,7 @@ impl<T> Index<Range<usize>> for AllocVec<T> {
         );
         assert!(range.end <= self.len, "Range is out of bounds");
         unsafe {
-            std::slice::from_raw_parts(self.ptr.as_ptr().add(range.start), range.end - range.start)
+            std::slice::from_raw_parts(self.ptr.add(range.start), range.end - range.start)
         }
     }
 }
@@ -779,7 +829,7 @@ impl<T> IndexMut<Range<usize>> for AllocVec<T> {
         assert!(range.end <= self.len, "Range out of bounds");
         unsafe {
             std::slice::from_raw_parts_mut(
-                self.ptr.as_ptr().add(range.start),
+                (self.ptr as *mut T).add(range.start),
                 range.end - range.start,
             )
         }
@@ -792,6 +842,7 @@ impl<'a, T> IntoIterator for &'a AllocVec<T> {
 
     /// Returns an iterator over the elements of the `AllocVec`.
     fn into_iter(self) -> Self::IntoIter {
+        // This call is safe even if the pointer is null.
         self.iter()
     }
 }
@@ -802,6 +853,7 @@ impl<'a, T> IntoIterator for &'a mut AllocVec<T> {
 
     /// Returns a mutable iterator over the elements of the `AllocVec`.
     fn into_iter(self) -> Self::IntoIter {
+        // This call is safe even if the pointer is null.
         self.iter_mut()
     }
 }
@@ -816,9 +868,10 @@ impl<T> Iterator for AllocVecIntoIter<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
+        // If len > 0, then the pointer is not null.
         if self.index < self.vec.len {
             unsafe {
-                let item = ptr::read(self.vec.ptr.as_ptr().add(self.index));
+                let item = ptr::read(self.vec.ptr.add(self.index));
                 self.index += 1;
                 Some(item)
             }
@@ -858,7 +911,7 @@ impl<T> Deref for AllocVec<T> {
         if self.len == 0 {
             &[]
         } else {
-            unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
+            unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
         }
     }
 }
@@ -868,7 +921,7 @@ impl<T> DerefMut for AllocVec<T> {
         if self.len == 0 {
             &mut []
         } else {
-            unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len) }
+            unsafe { std::slice::from_raw_parts_mut(self.ptr as *mut T, self.len) }
         }
     }
 }
@@ -887,7 +940,7 @@ impl<T: Clone> AllocVec<T> {
     fn clone_in(&self, compact: bool) -> Self {
         // New dangling vector
         let mut new_vec = AllocVec {
-            ptr: NonNull::dangling(),
+            ptr: ptr::null(),
             cap: 0,
             len: 0,
             _marker: PhantomData,
@@ -907,8 +960,8 @@ impl<T: Clone> AllocVec<T> {
 
         // Clone elements
         unsafe {
-            let src_slice = std::slice::from_raw_parts(self.ptr.as_ptr(), self.len);
-            let dest_slice = std::slice::from_raw_parts_mut(new_vec.ptr.as_ptr(), self.len);
+            let src_slice = std::slice::from_raw_parts(self.ptr, self.len);
+            let dest_slice = std::slice::from_raw_parts_mut(new_vec.ptr as *mut T, self.len);
             dest_slice.clone_from_slice(src_slice);
         }
 
@@ -945,7 +998,7 @@ mod tests {
     #[test]
     fn test_alloc_vec_new() {
         let alloc_vec: AllocVec<u8> = AllocVec::new();
-        assert_eq!(alloc_vec.ptr.as_ptr(), 0x1 as *mut u8);
+        assert!(alloc_vec.ptr.is_null());
         assert_eq!(alloc_vec.capacity(), 0);
         assert_eq!(alloc_vec.len(), 0);
     }
@@ -1029,7 +1082,7 @@ mod tests {
 
     #[test]
     #[cfg(debug_assertions)]
-    #[should_panic(expected = "Not allocated.")]
+    #[should_panic(expected = "Pointer must not be null.")]
     fn test_alloc_vec_push_overflow() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new();
 
