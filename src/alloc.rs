@@ -315,10 +315,12 @@ impl<T> AllocVec<T> {
     }
 
     /// Sets all elements in the allocated memory space to the default value of `T`.
+    /// The length will be updated to the current capacity.
     ///
     /// # Safety
     ///
     /// - This method will **not** allocate memory space, the capacity must be greater than `0`.
+    ///   Calling this method without allocating memory space will cause termination with `SIGSEGV`.
     ///   This condition is checked in debug mode only.
     ///
     /// - Initialized elements will be overwritten **without** calling `drop`.
@@ -390,6 +392,10 @@ impl<T> AllocVec<T> {
     /// This method will **not** grow the capacity automatically.
     ///
     /// The caller must ensure that the `AllocVec` has enough capacity to hold the new element.
+    ///
+    /// Calling this method without enough capacity will cause termination with `SIGSEGV`.
+    ///
+    /// This condition is checked in debug mode only.
     ///
     /// # Arguments
     ///

@@ -368,7 +368,6 @@ where
     /// If the capacity is zero, it will allocate the initial capacity without reindexing.
     #[inline(always)]
     fn ensure_capacity(&mut self) {
-        // Ensure that the map has enough capacity to insert the new key-value pair.
         if self.index.capacity() == 0 {
             // Allocate initial capacity for the index.
             self.index.allocate(1);
