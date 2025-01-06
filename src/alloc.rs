@@ -111,6 +111,52 @@ impl<T> AllocVec<T> {
         }
     }
 
+    /// Creates a new `AllocVec` with the specified capacity and populates it with the default
+    /// value of `T`.
+    ///
+    /// Memory is allocated for the specified capacity, and the length is set to the capacity.
+    ///
+    /// # Arguments
+    ///
+    /// - `cap` - The capacity of the new `AllocVec`.
+    ///
+    /// # Panics
+    ///
+    /// - When `cap` rounded up to the nearest multiple of `align` overflows `isize::MAX`.
+    ///
+    /// - When the allocator refuses to allocate memory space, this can happen when the system is
+    ///   out of memory or the size of the requested block is too large.
+    ///
+    #[must_use]
+    #[inline]
+    pub(crate) fn new_allocate_default(cap: usize) -> Self
+    where T: Default
+    {
+
+        // No allocation required
+        if cap == 0 {
+            return Self::new();
+        }
+
+        // Allocate layout
+        let ptr = Self::allocate_layout(cap);
+
+        // Initialize elements with default values
+        unsafe {
+            for i in 0..cap {
+                ptr::write(ptr.as_ptr().add(i), T::default());
+            }
+        }
+
+        // New allocated vector
+        AllocVec {
+            ptr,
+            cap,
+            len: cap,
+            _marker: PhantomData,
+        }
+    }
+
     /// Returns the capacity of the `AllocVec`.
     #[inline]
     pub(crate) fn capacity(&self) -> usize {
@@ -775,52 +821,6 @@ impl<T> IndexMut<Range<usize>> for AllocVec<T> {
     }
 }
 
-impl<T: Default> AllocVec<T> {
-    /// Creates a new `AllocVec` with the specified capacity and populates it with the default
-    /// value of `T`.
-    ///
-    /// Memory is allocated for the specified capacity, and the length is set to the capacity.
-    ///
-    /// # Arguments
-    ///
-    /// - `cap` - The capacity of the new `AllocVec`.
-    ///
-    /// # Panics
-    ///
-    /// - When `cap` rounded up to the nearest multiple of `align` overflows `isize::MAX`.
-    ///
-    /// - When the allocator refuses to allocate memory space, this can happen when the system is
-    ///   out of memory or the size of the requested block is too large.
-    ///
-    #[must_use]
-    #[inline]
-    pub(crate) fn new_allocate_and_populate(cap: usize) -> Self {
-
-        // No allocation required
-        if cap == 0 {
-            return Self::new();
-        }
-
-        // Allocate layout
-        let ptr = Self::allocate_layout(cap);
-
-        // Initialize elements with default values
-        unsafe {
-            for i in 0..cap {
-                ptr::write(ptr.as_ptr().add(i), T::default());
-            }
-        }
-
-        // New allocated vector
-        AllocVec {
-            ptr,
-            cap,
-            len: cap,
-            _marker: PhantomData,
-        }
-    }
-}
-
 impl<'a, T> IntoIterator for &'a AllocVec<T> {
     type Item = &'a T;
     type IntoIter = std::slice::Iter<'a, T>;
@@ -1002,7 +1002,7 @@ mod tests {
     #[test]
     fn test_alloc_vec_new_allocate_and_populate() {
         let capacity = 5;
-        let alloc_vec: AllocVec<u8> = AllocVec::new_allocate_and_populate(capacity);
+        let alloc_vec: AllocVec<u8> = AllocVec::new_allocate_default(capacity);
 
         // Map's length and capacity must be equal to the specified capacity
         assert_eq!(alloc_vec.len(), capacity);

@@ -47,7 +47,7 @@ enum Slot {
     Occupied(usize),
 }
 
-// Required to call AllocVec::with_capacity_and_populate()
+// Required to call AllocVec::new_allocate_default()
 impl Default for Slot {
     #[inline(always)]
     fn default() -> Self {
@@ -115,7 +115,7 @@ where
             // Initialize the entries and only reserve capacity
             entries: AllocVec::new_allocate(capacity),
             // Initialize the index with empty slots by calling T::default()
-            index: AllocVec::new_allocate_and_populate(capacity),
+            index: AllocVec::new_allocate_default(capacity),
             deleted: 0,
         }
     }
@@ -233,7 +233,7 @@ where
     /// Resets the index of the map with a new capacity.
     #[inline(always)]
     fn reset_index(&mut self, cap: usize) {
-        self.index = AllocVec::new_allocate_and_populate(cap);
+        self.index = AllocVec::new_allocate_default(cap);
         self.deleted = 0;
     }
 
@@ -1201,7 +1201,7 @@ where
             entries: self.entries.clone_compact(),
             // NOTE: Index can't be compacted because it's length is equal to the capacity,
             // so we allocate a new index with capacity equal to the number of elements.
-            index: AllocVec::new_allocate_and_populate(self.entries.len()),
+            index: AllocVec::new_allocate_default(self.entries.len()),
             deleted: 0,
         };
         clone.build_index();
