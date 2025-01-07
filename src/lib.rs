@@ -214,7 +214,7 @@ where
                     return (slot, None);
                 },
                 Slot::Occupied(index) => {
-                    if self.entries[index].key == *key {
+                    if self.entries.load(index).key == *key {
                         return (slot, Some(index));
                     }
                 },
@@ -488,7 +488,7 @@ where
     pub fn get(&self, key: &K) -> Option<&V> {
         let hash = self.hash(key);
         if let (_, Some(index)) = self.find_slot(hash, key) {
-            return Some(&self.entries[index].value);
+            return Some(&self.entries.load(index).value);
         }
         None
     }
@@ -532,7 +532,7 @@ where
     pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
         let hash = self.hash(key);
         if let (_, Some(index)) = self.find_slot(hash, key) {
-            return Some(&mut self.entries[index].value);
+            return Some(&mut self.entries.load_mut(index).value);
         }
         None
     }
@@ -1027,8 +1027,8 @@ impl<K, V> Index<usize> for OmniMap<K, V> {
     /// assert_eq!(map[1], "b");
     /// ```
     fn index(&self, index: usize) -> &Self::Output {
-        // This is safe because the index is checked in the AllocVec.
-        &self.entries[index].value
+        assert!(index < self.entries.len(), "Index out of bounds.");
+        &self.entries.load(index).value
     }
 }
 
@@ -1064,8 +1064,8 @@ impl<K, V> IndexMut<usize> for OmniMap<K, V> {
     /// assert_eq!(map[1], "d");
     /// ```
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        // This is safe because the index is checked in the AllocVec.
-        &mut self.entries[index].value
+        assert!(index < self.entries.len(), "Index out of bounds.");
+        &mut self.entries.load_mut(index).value
     }
 }
 
