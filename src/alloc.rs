@@ -1161,7 +1161,7 @@ mod tests {
     }
 
     #[test]
-    fn test_buffer_ptr_push() {
+    fn test_buffer_ptr_store_next() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
         buffer_ptr.store_next(2);
         assert_eq!(buffer_ptr.len(), 1);
@@ -1174,7 +1174,7 @@ mod tests {
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Pointer must not be null.")]
-    fn test_buffer_ptr_push_overflow() {
+    fn test_buffer_ptr_store_next_overflow() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new();
 
         // Not yet allocated, should panic
@@ -1247,7 +1247,7 @@ mod tests {
     }
 
     #[test]
-    fn test_buffer_ptr_first() {
+    fn test_buffer_ptr_load_first() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
         buffer_ptr.store_next(1);
         buffer_ptr.store_next(2);
@@ -1257,13 +1257,13 @@ mod tests {
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Index out of bounds")]
-    fn test_buffer_ptr_first_out_of_bounds() {
+    fn test_buffer_ptr_load_first_out_of_bounds() {
         let buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
         let _ = buffer_ptr.load_first();
     }
 
     #[test]
-    fn test_buffer_ptr_last() {
+    fn test_buffer_ptr_load_last() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
         buffer_ptr.store_next(1);
         buffer_ptr.store_next(2);
@@ -1273,13 +1273,13 @@ mod tests {
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Index out of bounds")]
-    fn test_buffer_ptr_last_out_of_bounds() {
+    fn test_buffer_ptr_load_last_out_of_bounds() {
         let buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
         let _ = buffer_ptr.load_last();
     }
 
     #[test]
-    fn test_buffer_ptr_pop_front() {
+    fn test_buffer_ptr_take_first() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
         buffer_ptr.store_next(1);
         buffer_ptr.store_next(2);
@@ -1293,13 +1293,13 @@ mod tests {
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Index out of bounds")]
-    fn test_buffer_ptr_pop_front_out_of_bounds() {
+    fn test_buffer_ptr_take_first_out_of_bounds() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
         buffer_ptr.take_first();
     }
 
     #[test]
-    fn test_buffer_ptr_pop() {
+    fn test_buffer_ptr_take_last() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
         buffer_ptr.store_next(42);
         assert_eq!(buffer_ptr.take_last(), 42);
@@ -1309,13 +1309,13 @@ mod tests {
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Index out of bounds")]
-    fn test_buffer_ptr_pop_out_of_bounds() {
+    fn test_buffer_ptr_take_last_out_of_bounds() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
         buffer_ptr.take_last();
     }
 
     #[test]
-    fn test_buffer_ptr_remove() {
+    fn test_buffer_ptr_take() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
         buffer_ptr.store_next(1);
         buffer_ptr.store_next(2);
@@ -1327,7 +1327,7 @@ mod tests {
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Index out of bounds")]
-    fn test_buffer_ptr_remove_out_of_bounds() {
+    fn test_buffer_ptr_take_out_of_bounds() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
         assert_eq!(buffer_ptr.take(0), 1);
     }
@@ -1463,7 +1463,7 @@ mod tests {
     }
 
     #[test]
-    fn test_buffer_ptr_clear() {
+    fn test_buffer_ptr_drop_init() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
         buffer_ptr.store_next(1);
         buffer_ptr.store_next(2);
