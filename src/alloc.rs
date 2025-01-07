@@ -863,16 +863,6 @@ impl<T> IntoIterator for AllocVec<T> {
     }
 }
 
-impl<T> FromIterator<T> for AllocVec<T> {
-    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        let mut alloc_vec = AllocVec::new();
-        for item in iter {
-            alloc_vec.store_next(item);
-        }
-        alloc_vec
-    }
-}
-
 impl<T> Deref for AllocVec<T> {
     type Target = [T];
 
