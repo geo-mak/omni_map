@@ -75,7 +75,7 @@ fn debug_assert_not_allocated<T>(instance: &AllocVec<T>) {
 ///
 /// ```text
 ///            ptr  +  len   +  cap     --
-///      NonNull<T> |  usize |  usize     |
+///        *const T |  usize |  usize     |
 ///        +--------+--------+--------+   |
 ///        | 0x0123 |      2 |      4 |   |--> Metadata
 ///        +--------+--------+--------+   |
@@ -98,7 +98,8 @@ pub(crate) struct AllocVec<T> {
 impl<T> AllocVec<T> {
 
     /// Creates a new, empty `AllocVec`.
-    /// No memory is allocated until elements are pushed onto the vector.
+    ///
+    /// No memory is allocated, and the length and capacity are set to `0`.
     #[must_use]
     #[inline]
     pub(crate) const fn new() -> Self {
@@ -112,6 +113,7 @@ impl<T> AllocVec<T> {
     }
 
     /// Creates a new `AllocVec` with the specified capacity.
+    ///
     /// Memory is allocated for the specified capacity, and the length is set to 0.
     ///
     /// # Arguments
@@ -188,7 +190,7 @@ impl<T> AllocVec<T> {
         self.cap
     }
 
-    /// Returns the length of the `AllocVec`.
+    /// Returns the number of initialized elements in the `AllocVec`.
     #[inline]
     pub(crate) const fn len(&self) -> usize {
         self.len
@@ -206,7 +208,7 @@ impl<T> AllocVec<T> {
     ///
     /// - Pointer must be `null` and the current capacity must be `0`.
     ///   This method doesn't deallocate the old memory space pointed by the pointer.
-    ///   Calling this method with a non-null pointer will cause memory leaks.
+    ///   Calling this method with a non-null pointer might cause memory leaks.
     ///   This condition is checked in debug mode only.
     ///
     /// - `cap` must be greater than `0`.
@@ -318,7 +320,7 @@ impl<T> AllocVec<T> {
     /// # Safety
     ///
     /// Initialized elements will be overwritten **without** calling `drop`.
-    /// This will cause memory leaks if the elements are not of trivial type,
+    /// This might cause memory leaks if the elements are not of trivial type,
     /// or not dropped properly.
     ///
     /// # Time Complexity
@@ -376,7 +378,7 @@ impl<T> AllocVec<T> {
         }
     }
 
-    /// Appends an element to the back of the `AllocVec`.
+    /// Stores a value after the last initialized element.
     ///
     /// # Safety
     ///
@@ -410,7 +412,7 @@ impl<T> AllocVec<T> {
         self.len += 1;
     }
 
-    /// Returns a reference to the first element.
+    /// Returns a reference to the first initialized element.
     ///
     ///
     /// # Safety
@@ -431,7 +433,7 @@ impl<T> AllocVec<T> {
         unsafe { &*self.ptr }
     }
 
-    /// Returns a reference to the last element.
+    /// Returns a reference to the last initialized element.
     ///
     /// # Safety
     ///
@@ -451,7 +453,7 @@ impl<T> AllocVec<T> {
         unsafe { &*self.ptr.add(self.len - 1) }
     }
 
-    /// Removes and returns the element at the specified index.
+    /// Removes and returns the initialized element at the specified index.
     ///
     /// # Arguments
     ///
@@ -461,7 +463,7 @@ impl<T> AllocVec<T> {
     ///
     /// This method checks for out of bounds access in debug mode only.
     ///
-    /// The caller must ensure that `index` is within the bounds of the `AllocVec`.
+    /// The caller must ensure that `index` is within the bounds of the initialized elements.
     ///
     /// # Time Complexity
     ///
@@ -495,13 +497,13 @@ impl<T> AllocVec<T> {
         }
     }
 
-    /// Removes the last element and returns it.
+    /// Removes the last initialized element and returns it.
     ///
     /// # Safety
     ///
     /// This method checks for out of bounds access in debug mode only.
     ///
-    /// The caller must ensure that the `AllocVec` is not empty.
+    /// The caller must ensure that the number of initialized elements is greater than `0`.
     ///
     /// # Time Complexity
     ///
@@ -515,13 +517,13 @@ impl<T> AllocVec<T> {
         unsafe { ptr::read(self.ptr.add(self.len)) }
     }
 
-    /// Removes the first element and returns it.
+    /// Removes the first initialized element and returns it.
     ///
     /// # Safety
     ///
     /// This method checks for out of bounds access in debug mode only.
     ///
-    /// The caller must ensure that the `AllocVec` is not empty.
+    /// The caller must ensure that the number of initialized elements is greater than `0`.
     ///
     /// # Time Complexity
     ///
@@ -556,6 +558,31 @@ impl<T> AllocVec<T> {
         }
     }
 
+    /// Calls `drop` on all initialized elements and sets the length to `0`.
+    /// If there are no initialized elements, this method will do nothing.
+    ///
+    /// # Safety
+    ///
+    /// Pointer must be allocated and the current capacity must be greater than `0`.
+    /// This condition is checked in debug mode only.
+    ///
+    /// # Time Complexity
+    ///
+    /// _O_(n) where n is the length of the `AllocVec`.
+    ///
+    #[inline]
+    pub(crate) fn drop_init(&mut self) {
+        #[cfg(debug_assertions)]
+        debug_assert_allocated(self);
+
+        // Update len first
+        self.len = 0;
+        unsafe {
+            // Call drop on each element to release resources.
+            ptr::drop_in_place(std::slice::from_raw_parts_mut(self.ptr as *mut T, self.len));
+        }
+    }
+    
     /// Replaces the value at the given index with a new value and returns the old value.
     ///
     /// # Arguments
@@ -566,7 +593,7 @@ impl<T> AllocVec<T> {
     ///
     /// # Panics
     ///
-    /// Panics if the index is out of bounds.
+    /// Panics if the index is out of bounds of the initialized elements.
     ///
     /// # Time Complexity
     ///
@@ -592,7 +619,7 @@ impl<T> AllocVec<T> {
     ///
     /// # Panics
     ///
-    /// Panics if either index is out of bounds.
+    /// Panics if either index is out of bounds of the initialized elements.
     ///
     /// # Time Complexity
     ///
@@ -674,7 +701,7 @@ impl<T> AllocVec<T> {
         }
     }
 
-    /// Returns a mutable iterator over the elements of the `AllocVec`.
+    /// Returns a mutable iterator over the initialized elements of the `AllocVec`.
     /// If the `AllocVec` is empty, the iterator will return an empty slice.
     ///
     /// # Safety
@@ -693,26 +720,7 @@ impl<T> AllocVec<T> {
             unsafe { std::slice::from_raw_parts_mut(self.ptr as *mut T, self.len).iter_mut() }
         }
     }
-
-    /// Clears the `AllocVec` and calls `drop` on elements.
-    ///
-    /// # Time Complexity
-    ///
-    /// _O_(n) where n is the length of the `AllocVec`.
-    ///
-    #[inline]
-    pub(crate) fn drop_init(&mut self) {
-        #[cfg(debug_assertions)]
-        debug_assert_allocated(self);
-
-        // Update len first
-        self.len = 0;
-        unsafe {
-            // Call drop on each element to release resources.
-            ptr::drop_in_place(std::slice::from_raw_parts_mut(self.ptr as *mut T, self.len));
-        }
-    }
-
+    
     /// Returns the current memory usage of the `AllocVec` in bytes.
     ///
     /// The result is sum of the size of the metadata (ptr, cap and len) and the size of the
@@ -837,7 +845,7 @@ impl<'a, T> IntoIterator for &'a AllocVec<T> {
     type Item = &'a T;
     type IntoIter = std::slice::Iter<'a, T>;
 
-    /// Returns an iterator over the elements of the `AllocVec`.
+    /// Returns an iterator over the initialized elements of the `AllocVec`.
     fn into_iter(self) -> Self::IntoIter {
         // This call is safe even if the pointer is null.
         self.iter()
@@ -848,14 +856,14 @@ impl<'a, T> IntoIterator for &'a mut AllocVec<T> {
     type Item = &'a mut T;
     type IntoIter = std::slice::IterMut<'a, T>;
 
-    /// Returns a mutable iterator over the elements of the `AllocVec`.
+    /// Returns a mutable iterator over the initialized elements of the `AllocVec`.
     fn into_iter(self) -> Self::IntoIter {
         // This call is safe even if the pointer is null.
         self.iter_mut()
     }
 }
 
-/// An iterator over the elements of a `AllocVec`.
+/// An iterator over the initialized elements of the `AllocVec`.
 pub(crate) struct AllocVecIntoIter<T> {
     vec: AllocVec<T>,
     index: usize,
@@ -882,7 +890,7 @@ impl<T> IntoIterator for AllocVec<T> {
     type Item = T;
     type IntoIter = AllocVecIntoIter<T>;
 
-    /// Consumes the `AllocVec` and returns an iterator over its elements.
+    /// Consumes the `AllocVec` and returns an iterator over its initialized elements.
     fn into_iter(self) -> Self::IntoIter {
         AllocVecIntoIter {
             vec: self,
