@@ -957,9 +957,9 @@ where
         self.entries.iter().map(|entry| &entry.value)
     }
 
-    /// Calculates the load factor of the index.
+    /// Returns the current load factor of the `OmniMap` as a ratio.
     #[inline]
-    pub fn load_factor(&self) -> f64 {
+    pub fn current_load(&self) -> f64 {
         if self.index.capacity() == 0 {
             return 0.0;
         }
@@ -1257,26 +1257,26 @@ mod tests {
     }
 
     #[test]
-    fn test_map_load_factor() {
+    fn test_map_current_load() {
         // New map with zero capacity
         let mut map = OmniMap::new();
 
-        assert_eq!(map.load_factor(), 0.0); // Empty map
+        assert_eq!(map.current_load(), 0.0); // Empty map
 
         map.insert(1, 2);
-        assert_eq!(map.load_factor(), 1.0); // Full capacity 1
+        assert_eq!(map.current_load(), 1.0); // Full capacity 1
 
         map.insert(2, 3);
-        assert_eq!(map.load_factor(), 1.0); // Full capacity 2
+        assert_eq!(map.current_load(), 1.0); // Full capacity 2
 
         map.insert(3, 4);
-        assert_eq!(map.load_factor(), 0.75); // 3/4 of new capacity 4, which is exactly the threshold
+        assert_eq!(map.current_load(), 0.75); // 3/4 of new capacity 4, which is exactly the threshold
 
         map.insert(4, 5);
-        assert_eq!(map.load_factor(), 1.0); // Full capacity 4
+        assert_eq!(map.current_load(), 1.0); // Full capacity 4
 
         map.insert(5, 6);
-        assert_eq!(map.load_factor(), 0.625); // 5/8 of new capacity 8
+        assert_eq!(map.current_load(), 0.625); // 5/8 of new capacity 8
     }
 
     #[test]
