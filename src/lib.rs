@@ -1901,4 +1901,76 @@ mod tests {
             assert_eq!(map.get(&i), Some(&i));
         }
     }
+
+    /// These tests check the behavior of the map when the key and value are zero-sized types.
+    /// They make sure the behavior is consistent with the behavior of `HashMap` in the
+    /// standard library when using zero-sized types.
+    #[test]
+    fn test_map_zst_keys() {
+        // Grow dynamically.
+        let mut map = OmniMap::new();
+
+        // Expected op: insert.
+        map.insert((), 1);
+
+        // Expected op: update.
+        map.insert((), 2);
+        map.insert((), 3);
+
+        // Len stays 1.
+        assert_eq!(map.len(), 1);
+
+        // Normally it would grow to 4, but capacity will remain invariant after the second insert.
+        assert_eq!(map.capacity(), 2);
+
+        // Access the keys returns the last updated value
+        assert_eq!(map.get(&()), Some(&3));
+
+        map.remove(&());
+
+        // Len goes back to 0.
+        assert_eq!(map.len(), 0);
+        assert_eq!(map.get(&()), None);
+
+        map.shrink_to_fit();
+
+        // Capacity goes back to 0.
+        assert_eq!(map.capacity(), 0);
+    }
+
+    #[test]
+    fn test_map_zst_values() {
+        // Grow dynamically.
+        let mut map = OmniMap::new();
+
+        // Add 3 items.
+        map.insert(1, ());
+        map.insert(2, ());
+        map.insert(3, ());
+
+        // Len and capacity as usual.
+        assert_eq!(map.len(), 3);
+        assert_eq!(map.capacity(), 4);
+
+        // Access by get returns &().
+        for i in 1..4 {
+            assert_eq!(map.get(&i), Some(&()));
+        }
+
+        // Access by index returns ().
+        for i in 0..3 {
+            assert_eq!(map[i], ());
+        }
+
+        // Remove an item.
+        map.remove(&2);
+
+        assert_eq!(map.len(), 2);
+        assert_eq!(map.capacity(), 4);
+
+        map.shrink_to_fit();
+
+        assert_eq!(map.len(), 2);
+        assert_eq!(map.capacity(), 2);
+    }
 }
