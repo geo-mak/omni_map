@@ -33,14 +33,14 @@ fn debug_layout_size_align(size: usize, align: usize) {
 ///
 /// - The pointer must not be null.
 ///
-/// - The capacity must not be `0`.
+/// - The count must not be `0`.
 ///
 #[cfg(debug_assertions)]
 fn debug_assert_allocated<T>(instance: &BufferPointer<T>) {
     // Note: ptr.is_null() and ptr::null() are unstable as const functions,
     // so this fn can't be made const yet, and we can't use it in const functions.
     assert!(!instance.ptr.is_null(), "Pointer must not be null.");
-    assert_ne!(instance.cap, 0, "Capacity must not be zero.");
+    assert_ne!(instance.count, 0, "Count must not be zero.");
 }
 
 /// Debug-mode check to check the allocation state.
@@ -50,14 +50,14 @@ fn debug_assert_allocated<T>(instance: &BufferPointer<T>) {
 ///
 /// - The pointer must be null.
 ///
-/// - The capacity must be `0`.
+/// - The count must be `0`.
 ///
 #[cfg(debug_assertions)]
 fn debug_assert_not_allocated<T>(instance: &BufferPointer<T>) {
     // Note: ptr.is_null() and ptr::null() are unstable as const functions,
     // so this fn can't be made const yet, and we can't use it in const functions.
     assert!(instance.ptr.is_null(), "Pointer must be null.");
-    assert_eq!(instance.cap, 0, "Capacity must be zero.");
+    assert_eq!(instance.count, 0, "Count must be zero.");
 }
 
 /// `BufferPointer` represents an indirect reference to _one or more_ values of type `T`
@@ -67,7 +67,7 @@ fn debug_assert_not_allocated<T>(instance: &BufferPointer<T>) {
 /// when storing or loading elements.
 ///
 /// Contrasted with other pointer types, `BufferPointer` stores the count of the elements it can
-/// refer to (`cap`), and the number of the initialized elements (`len`).
+/// refer to (`count`), and the number of the initialized elements (`len`).
 ///
 /// This buffer uses the registered `#[global_allocator]` to allocate memory.
 ///
@@ -97,10 +97,10 @@ fn debug_assert_not_allocated<T>(instance: &BufferPointer<T>) {
 ///
 /// - `ptr` is a raw pointer to the allocated memory space.
 /// - `len` is the number of elements in the pointer.
-/// - `cap` is the number of elements the pointer can hold.
+/// - `count` is the number of elements the pointer can hold.
 ///
 /// ```text
-///        raw ptr  +  len   +  cap     --
+///        raw ptr  +  len   +  count     --
 ///        *const T |  usize |  usize     |
 ///        +--------+--------+--------+   |
 ///        | 0x0123 |      2 |      4 |   |--> Metadata
@@ -116,7 +116,7 @@ fn debug_assert_not_allocated<T>(instance: &BufferPointer<T>) {
 /// ```
 pub(crate) struct BufferPointer<T> {
     ptr: *const T,
-    cap: usize,
+    count: usize,
     len: usize,
     _marker: PhantomData<T>,
 }
@@ -124,7 +124,7 @@ pub(crate) struct BufferPointer<T> {
 impl<T> BufferPointer<T> {
 
     /// Creates a new `BufferPointer` without allocating memory.
-    /// The capacity and length are set to `0`.
+    /// The count and length are set to `0`.
     ///
     #[must_use]
     #[inline]
@@ -132,76 +132,76 @@ impl<T> BufferPointer<T> {
         // New instance with no allocation.
         BufferPointer {
             ptr: ptr::null(),
-            cap: 0,
+            count: 0,
             len: 0,
             _marker: PhantomData,
         }
     }
 
-    /// Creates a new `BufferPointer` with the specified capacity.
+    /// Creates a new `BufferPointer` with the specified count.
     ///
-    /// Memory is allocated for the specified capacity, and the length is set to `0`.
+    /// Memory is allocated for the specified count, and the length is set to `0`.
     ///
     /// # Arguments
     ///
-    /// - `cap` - The capacity of the new `BufferPointer`.
+    /// - `count` - The count of the new `BufferPointer`.
     ///
     /// # Panics
     ///
-    /// - When `cap` rounded up to the nearest multiple of `align` overflows `isize::MAX`.
+    /// - When `count` rounded up to the nearest multiple of `align` overflows `isize::MAX`.
     ///
     /// - When the allocator refuses to allocate memory space, this can happen when the system is
     ///   out of memory or the size of the requested block is too large.
     ///
     #[must_use]
     #[inline]
-    pub(crate) fn new_allocate(cap: usize) -> Self {
+    pub(crate) fn new_allocate(count: usize) -> Self {
         // New instance with no allocation
         let mut instance = Self::new();
 
         // No allocation required
-        if cap == 0 {
+        if count == 0 {
             return instance;
         };
 
         // Allocate memory space
-        instance.allocate(cap);
+        instance.allocate(count);
 
         // Return the new instance
         instance
     }
 
-    /// Creates a new `BufferPointer` with the specified capacity and populates it with the default
+    /// Creates a new `BufferPointer` with the specified count and populates it with the default
     /// value of `T`.
     ///
-    /// Memory is allocated for the specified capacity, and the length is set to the capacity.
+    /// Memory is allocated for the specified count, and the length is set to the count.
     ///
     /// # Arguments
     ///
-    /// - `cap` - The capacity of the new `BufferPointer`.
+    /// - `count` - The count of the new `BufferPointer`.
     ///
     /// # Panics
     ///
-    /// - When `cap` rounded up to the nearest multiple of `align` overflows `isize::MAX`.
+    /// - When `count` rounded up to the nearest multiple of `align` overflows `isize::MAX`.
     ///
     /// - When the allocator refuses to allocate memory space, this can happen when the system is
     ///   out of memory or the size of the requested block is too large.
     ///
     #[must_use]
     #[inline]
-    pub(crate) fn new_allocate_default(cap: usize) -> Self
+    pub(crate) fn new_allocate_default(count: usize) -> Self
     where T: Default
     {
         // New instance with no allocation
         let mut instance = Self::new();
 
         // No allocation required
-        if cap == 0 {
+        if count == 0 {
             return instance;
         }
 
         // Allocate memory space
-        instance.allocate(cap);
+        instance.allocate(count);
 
         // Set all elements to the default value of T
         instance.memset_default();
@@ -210,13 +210,13 @@ impl<T> BufferPointer<T> {
         instance
     }
 
-    /// Returns the capacity of the `BufferPointer`.
+    /// Returns the allocated count of the `BufferPointer`.
     #[inline]
-    pub(crate) const fn capacity(&self) -> usize {
-        self.cap
+    pub(crate) const fn count(&self) -> usize {
+        self.count
     }
 
-    /// Returns the number of initialized elements in the `BufferPointer`.
+    /// Returns the number of **initialized** elements of the `BufferPointer`.
     #[inline]
     pub(crate) const fn len(&self) -> usize {
         self.len
@@ -232,29 +232,29 @@ impl<T> BufferPointer<T> {
     ///
     /// # Safety
     ///
-    /// - Pointer must be `null` and the current capacity must be `0`.
+    /// - Pointer must be `null` and the current count must be `0`.
     ///   This method doesn't deallocate the old memory space pointed by the pointer.
     ///   Calling this method with a non-null pointer might cause memory leaks.
     ///   This condition is checked in debug mode only.
     ///
-    /// - `cap` must be greater than `0`.
+    /// - `count` must be greater than `0`.
     ///   This condition is checked in debug mode only.
     ///
-    /// - `cap`, when rounded up to the nearest multiple of `align`, must be less than or
+    /// - `count`, when rounded up to the nearest multiple of `align`, must be less than or
     ///   equal to `isize::MAX`.
     ///   This condition is checked in debug mode only.
     ///
-    pub(crate) fn allocate(&mut self, cap: usize) {
-        // Pointer must be null and the current capacity must be 0
+    pub(crate) fn allocate(&mut self, count: usize) {
+        // Pointer must be null and the current count must be 0
         #[cfg(debug_assertions)]
         debug_assert_not_allocated(self);
 
-        // Not allowed to allocate zero capacity
-        debug_assert_ne!(cap, 0, "Requested capacity must be greater than 0");
+        // Not allowed to allocate zero count
+        debug_assert_ne!(count, 0, "Requested count must be greater than 0");
 
         // New layout
         let layout = unsafe {
-            let layout_size = cap.unchecked_mul(size_of::<T>());
+            let layout_size = count.unchecked_mul(size_of::<T>());
 
             // Debug-mode check for the layout size and alignment
             #[cfg(debug_assertions)]
@@ -272,35 +272,35 @@ impl<T> BufferPointer<T> {
             alloc::handle_alloc_error(layout);
         }
 
-        // Update the pointer and capacity
+        // Update the pointer and count
         self.ptr = ptr;
-        self.cap = cap;
+        self.count = count;
     }
 
-    /// Shrinks or grows the allocated memory space to the specified capacity.
+    /// Shrinks or grows the allocated memory space to the specified count.
     ///
     /// # Safety
     ///
-    /// - Pointer must be allocated and the current capacity must be greater than `0`.
+    /// - Pointer must be allocated and the current count must be greater than `0`.
     ///   This condition is checked in debug mode only.
     ///
-    /// - `new_cap`, when rounded up to the nearest multiple of `align`, must be less than or
+    /// - `new_count`, when rounded up to the nearest multiple of `align`, must be less than or
     ///   equal to `isize::MAX`.
     ///   This condition is checked in debug mode only.
     ///
-    /// - `new_cap` must be greater than or equal to the current length.
-    ///   Reallocating capacity less than the current length might cause memory leaks, as the
+    /// - `new_count` must be greater than or equal to the current length.
+    ///   Reallocating count less than the current length might cause memory leaks, as the
     ///   elements will be out of bounds without being dropped properly.
     ///   This condition is checked in debug mode only.
     ///
-    pub(crate) fn reallocate(&mut self, new_cap: usize) {
+    pub(crate) fn reallocate(&mut self, new_count: usize) {
         #[cfg(debug_assertions)]
         debug_assert_allocated(self);
 
-        // Reallocating capacity less than the current length is not allowed.
+        // Reallocating count less than the current length is not allowed.
         debug_assert!(
-            new_cap >= self.len,
-            "New capacity must be greater than or equal to the current length."
+            new_count >= self.len,
+            "New count must be greater than or equal to the current length."
         );
 
         let t_size = size_of::<T>(); //  const
@@ -308,7 +308,7 @@ impl<T> BufferPointer<T> {
 
         // New size
         let new_size = unsafe {
-            new_cap.unchecked_mul(t_size)
+            new_count.unchecked_mul(t_size)
         };
 
         // Debug-mode check for the new layout
@@ -318,7 +318,7 @@ impl<T> BufferPointer<T> {
         // Current layout
         let layout = unsafe {
             // Already checked in the `allocate_layout` function
-            let current_size = self.cap.unchecked_mul(t_size);
+            let current_size = self.count.unchecked_mul(t_size);
             Layout::from_size_align_unchecked(current_size, t_align)
         };
 
@@ -333,13 +333,13 @@ impl<T> BufferPointer<T> {
             alloc::handle_alloc_error(layout);
         }
 
-        // Update the pointer and capacity
+        // Update the pointer and count
         self.ptr = new_ptr;
-        self.cap = new_cap;
+        self.count = new_count;
     }
 
     /// Sets all elements in the allocated memory space to the default value of `T`.
-    /// The length will be updated to the current capacity.
+    /// The length will be updated to the current count.
     ///
     /// If no memory is allocated, this method will do nothing.
     ///
@@ -351,7 +351,7 @@ impl<T> BufferPointer<T> {
     ///
     /// # Time Complexity
     ///
-    /// _O_(n) where n is current capacity of the `BufferPointer`.
+    /// _O_(n) where n is current count of the `BufferPointer`.
     ///
     #[inline]
     pub(crate) fn memset_default(&mut self)
@@ -359,24 +359,24 @@ impl<T> BufferPointer<T> {
     {
         // Write the value to all elements
         unsafe {
-            for i in 0..self.cap {
+            for i in 0..self.count {
                 ptr::write((self.ptr as *mut T).add(i), T::default());
             }
         }
 
         // Update length
-        self.len = self.cap;
+        self.len = self.count;
     }
 
     /// Stores a value after the last initialized element.
     ///
     /// # Safety
     ///
-    /// This method will **not** grow the capacity automatically.
+    /// This method will **not** grow the count automatically.
     ///
-    /// The caller must ensure that the `BufferPointer` has enough capacity to hold the new element.
+    /// The caller must ensure that the `BufferPointer` has enough count to hold the new element.
     ///
-    /// Calling this method without enough capacity will cause termination with `SIGSEGV`.
+    /// Calling this method without enough count will cause termination with `SIGSEGV`.
     ///
     /// This condition is checked in debug mode only.
     ///
@@ -390,8 +390,8 @@ impl<T> BufferPointer<T> {
     ///
     #[inline(always)]
     pub(crate) const fn store_next(&mut self, value: T) {
-        // Cap > len, so the pointer is not null.
-        debug_assert!(self.len < self.cap, "Capacity overflow.");
+        // count > len, so the pointer is not null.
+        debug_assert!(self.len < self.count, "Allocated count is exhausted.");
 
         // Write the value to the next uninitialized element.
         unsafe {
@@ -616,7 +616,7 @@ impl<T> BufferPointer<T> {
     ///
     /// # Safety
     ///
-    /// Pointer must be allocated and the current capacity must be greater than `0`.
+    /// Pointer must be allocated and the current count must be greater than `0`.
     /// This condition is checked in debug mode only.
     ///
     /// # Time Complexity
@@ -776,7 +776,7 @@ impl<T> BufferPointer<T> {
 
     /// Returns the current memory usage of the `BufferPointer` in bytes.
     ///
-    /// The result is sum of the size of the metadata (ptr, cap and len) and the size of the
+    /// The result is sum of the size of the metadata (ptr, count and len) and the size of the
     /// allocated elements.
     ///
     /// > Note:
@@ -786,10 +786,10 @@ impl<T> BufferPointer<T> {
     #[must_use]
     #[inline]
     pub(crate) fn memory_usage(&self) -> usize {
-        // Size of the metadata (ptr, cap and len)
+        // Size of the metadata (ptr, count and len)
         let metadata_size = size_of::<usize>() * 3;
         // Size of the allocated elements
-        let elements_size = self.cap * size_of::<T>();
+        let elements_size = self.count * size_of::<T>();
         // Total memory usage
         metadata_size + elements_size
     }
@@ -802,7 +802,7 @@ impl<T> Drop for BufferPointer<T> {
             unsafe {
                 // Current layout
                 let layout = Layout::from_size_align_unchecked(
-                    self.cap * size_of::<T>(),
+                    self.count * size_of::<T>(),
                     align_of::<T>()
                 );
 
@@ -817,7 +817,7 @@ impl<T> Drop for BufferPointer<T> {
 }
 
 impl<T> Default for BufferPointer<T> {
-    /// Returns the new `BufferPointer` with a capacity of 0.
+    /// Returns the new `BufferPointer` with a count of 0.
     #[must_use]
     #[inline]
     fn default() -> Self {
@@ -920,21 +920,21 @@ impl<T: Clone> BufferPointer<T> {
         // New instance with no allocation.
         let mut new_vec = BufferPointer {
             ptr: ptr::null(),
-            cap: 0,
+            count: 0,
             len: 0,
             _marker: PhantomData,
         };
 
         // No allocation required either way
-        if self.cap == 0 || (compact && self.len == 0) {
+        if self.count == 0 || (compact && self.len == 0) {
             return new_vec;
         }
 
-        // cap here must be greater than 0 either way (self.cap or self.len)
-        let cap = if compact { self.len } else { self.cap };
+        // count here must be greater than 0 either way (self.count or self.len)
+        let count = if compact { self.len } else { self.count };
 
         // Allocate memory space
-        new_vec.allocate(cap);
+        new_vec.allocate(count);
 
         // Clone elements
         unsafe {
@@ -950,7 +950,7 @@ impl<T: Clone> BufferPointer<T> {
         new_vec
     }
 
-    /// Clones the `BufferPointer` with capacity equal to the length.
+    /// Clones the `BufferPointer` with count equal to the length.
     #[must_use]
     pub(crate) fn clone_compact(&self) -> Self {
         self.clone_in(true)
@@ -978,7 +978,7 @@ mod tests {
         let buffer_ptr: BufferPointer<u8> = BufferPointer::new();
 
         assert!(buffer_ptr.ptr.is_null());
-        assert_eq!(buffer_ptr.capacity(), 0);
+        assert_eq!(buffer_ptr.count(), 0);
         assert_eq!(buffer_ptr.len(), 0);
     }
 
@@ -987,18 +987,18 @@ mod tests {
         let buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
 
         assert!(!buffer_ptr.ptr.is_null());
-        assert_eq!(buffer_ptr.capacity(), 10);
+        assert_eq!(buffer_ptr.count(), 10);
         assert_eq!(buffer_ptr.len(), 0);
     }
 
     #[test]
     #[cfg(debug_assertions)]
-    fn test_buffer_ptr_new_allocate_zero_cap() {
+    fn test_buffer_ptr_new_allocate_zero_count() {
         let buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(0);
 
-        // Capacity is 0, no allocation should have been made
+        // count is 0, no allocation should have been made
         assert!(buffer_ptr.ptr.is_null());
-        assert_eq!(buffer_ptr.capacity(), 0);
+        assert_eq!(buffer_ptr.count(), 0);
         assert_eq!(buffer_ptr.len(), 0);
     }
 
@@ -1017,17 +1017,17 @@ mod tests {
         buffer_ptr.allocate(10);
 
         assert!(!buffer_ptr.ptr.is_null());
-        assert_eq!(buffer_ptr.capacity(), 10);
+        assert_eq!(buffer_ptr.count(), 10);
         assert_eq!(buffer_ptr.len(), 0);
     }
 
     #[test]
     #[cfg(debug_assertions)]
-    #[should_panic(expected = "Requested capacity must be greater than 0")]
-    fn test_buffer_ptr_allocate_zero_cap() {
+    #[should_panic(expected = "Requested count must be greater than 0")]
+    fn test_buffer_ptr_allocate_zero_count() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new();
 
-        // Capacity must be greater than 0, should panic
+        // count must be greater than 0, should panic
         buffer_ptr.allocate(0);
     }
 
@@ -1051,7 +1051,7 @@ mod tests {
         buffer_ptr.allocate(1);
 
         assert!(!buffer_ptr.ptr.is_null());
-        assert_eq!(buffer_ptr.capacity(), 1);
+        assert_eq!(buffer_ptr.count(), 1);
 
         // Already allocated, should panic
         buffer_ptr.allocate(2);
@@ -1072,7 +1072,7 @@ mod tests {
     #[test]
     fn test_buffer_ptr_memset_default() {
         let mut buffer_ptr: BufferPointer<Choice> = BufferPointer::new_allocate(10);
-        assert_eq!(buffer_ptr.capacity(), 10);
+        assert_eq!(buffer_ptr.count(), 10);
         assert_eq!(buffer_ptr.len(), 0);
 
         // Set all elements to the default value of `Choice`
@@ -1089,27 +1089,27 @@ mod tests {
 
     #[test]
     fn test_buffer_ptr_new_allocate_default() {
-        let capacity = 5;
-        let buffer_ptr: BufferPointer<Choice> = BufferPointer::new_allocate_default(capacity);
+        let count = 5;
+        let buffer_ptr: BufferPointer<Choice> = BufferPointer::new_allocate_default(count);
 
         // Memory space should have been allocated
         assert!(!buffer_ptr.ptr.is_null());
-        assert_eq!(buffer_ptr.capacity(), capacity);
-        assert_eq!(buffer_ptr.len(), capacity);
+        assert_eq!(buffer_ptr.count(), count);
+        assert_eq!(buffer_ptr.len(), count);
 
         // All elements are must have been initialized to their default values
-        for i in 0..capacity {
+        for i in 0..count {
             assert!(matches!(buffer_ptr[i], Choice::Default))
         }
     }
 
     #[test]
-    fn test_buffer_ptr_new_allocate_default_zero_cap() {
+    fn test_buffer_ptr_new_allocate_default_zero_count() {
         let buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate_default(0);
 
-        // Capacity is 0, no allocation should have been made
+        // count is 0, no allocation should have been made
         assert!(buffer_ptr.ptr.is_null());
-        assert_eq!(buffer_ptr.capacity(), 0);
+        assert_eq!(buffer_ptr.count(), 0);
         assert_eq!(buffer_ptr.len(), 0);
     }
 
@@ -1123,7 +1123,7 @@ mod tests {
     #[test]
     fn test_buffer_ptr_reallocate() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(3);
-        assert_eq!(buffer_ptr.capacity(), 3);
+        assert_eq!(buffer_ptr.count(), 3);
 
         buffer_ptr.store_next(1);
         buffer_ptr.store_next(2);
@@ -1131,10 +1131,10 @@ mod tests {
 
         assert_eq!(buffer_ptr.len(), 3);
 
-        // Grows the capacity to 5
+        // Grows the count to 5
         buffer_ptr.reallocate(5);
 
-        assert_eq!(buffer_ptr.capacity(), 5);
+        assert_eq!(buffer_ptr.count(), 5);
 
         // Check values after reallocation
         for i in 0..3 {
@@ -1154,14 +1154,14 @@ mod tests {
 
     #[test]
     #[cfg(debug_assertions)]
-    #[should_panic(expected = "New capacity must be greater than or equal to the current length")]
+    #[should_panic(expected = "New count must be greater than or equal to the current length")]
     fn test_buffer_ptr_reallocate_less_than_len() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(3);
         buffer_ptr.store_next(1);
         buffer_ptr.store_next(2);
         buffer_ptr.store_next(3);
 
-        // New capacity is less than the current length, should panic
+        // New count is less than the current length, should panic
         buffer_ptr.reallocate(2);
     }
 
@@ -1513,9 +1513,9 @@ mod tests {
         let original: BufferPointer<u8> = BufferPointer::new();
         let cloned = original.clone();
 
-        // Cloned must have the same length and capacity
+        // Cloned must have the same length and count
         assert_eq!(cloned.len(), 0);
-        assert_eq!(cloned.capacity(), 0);
+        assert_eq!(cloned.count(), 0);
 
         // They must be equal (ptr is dangling in both)
         assert_eq!(cloned, original);
@@ -1528,12 +1528,12 @@ mod tests {
         original.store_next(2);
         original.store_next(3);
 
-        // Clone with the same capacity
+        // Clone with the same count
         let mut cloned = original.clone();
 
-        // Cloned must have the same length and capacity
+        // Cloned must have the same length and count
         assert_eq!(cloned.len(), original.len());
-        assert_eq!(cloned.capacity(), original.capacity());
+        assert_eq!(cloned.count(), original.count());
 
         // The elements in the clone must be the same as in the original
         for i in 0..original.len() {
@@ -1554,14 +1554,14 @@ mod tests {
         original.store_next(2);
         original.store_next(3);
 
-        // Clone without retaining the capacity
+        // Clone without retaining the count
         let cloned = original.clone_compact();
 
         // Cloned must have the same length as the original
         assert_eq!(cloned.len(), original.len());
 
-        // Cloned must have a capacity equal to the length of the original
-        assert_eq!(cloned.capacity(), original.len());
+        // Cloned must have a count equal to the length of the original
+        assert_eq!(cloned.count(), original.len());
 
         // The elements in the clone must be the same as in the original
         for i in 0..original.len() {
@@ -1571,11 +1571,11 @@ mod tests {
         // Mutating the clone must not affect the original
         let mut cloned = cloned; // make mutable
 
-        // Increase the capacity of the clone by 1
+        // Increase the count of the clone by 1
         cloned.reallocate(4);
 
-        // Compare the capacities of the clone and the original
-        assert_eq!(cloned.capacity(), original.len() + 1);
+        // Count of the clone must be equal to the length of the original + 1
+        assert_eq!(cloned.count(), original.len() + 1);
 
         // Add a new element
         cloned.store_next(4);
@@ -1612,7 +1612,7 @@ mod tests {
         vec4.store_next(2);
         vec4.store_next(3);
 
-        // pointers with the same elements but different capacities must be equal
+        // pointers with the same elements but with different counts, must be equal
         assert_eq!(vec1, vec4);
     }
 

@@ -138,7 +138,7 @@ where
     /// ```
     #[inline]
     pub fn capacity(&self) -> usize {
-        self.index.capacity()
+        self.index.count()
     }
 
     /// Returns the number of key-value pairs in the `OmniMap`.
@@ -202,7 +202,7 @@ where
     ///   The returned slot is the last checked slot before the search ends.
     ///
     fn find_slot(&self, hash: usize, key: &K) -> (usize, Option<usize>) {
-        let capacity = self.index.capacity();
+        let capacity = self.index.count();
         let mut slot = hash % capacity;
         let mut step = 0;
         // EDGE CASE: if capacity is full and all slots are occupied, it will be an infinite loop,
@@ -240,11 +240,11 @@ where
     /// Builds the index of the map according to the current entries and the capacity of the index.
     /// This method should be called **only** after resetting the index with a new capacity.
     fn build_index(&mut self) {
-        let capacity = self.index.capacity();
+        let capacity = self.index.count();
 
         // NOTE: This must be ensured by the calling contexts, because calling this method is only
         // needed after shrinking or growing the capacity of the index.
-        debug_assert_eq!(capacity, self.entries.capacity());
+        debug_assert_eq!(capacity, self.entries.count());
 
         // Build the index of the current entries.
         for (index, entry) in self.entries.iter().enumerate() {
@@ -301,14 +301,14 @@ where
         // capacity.
         self.entries.reallocate(new_cap);
         // Reset the index with the new capacity.
-        self.reset_index(self.entries.capacity());
+        self.reset_index(self.entries.count());
         // Rebuild the index with the new capacity.
         self.build_index();
     }
 
     /// Resizes map with reindexing if the current load exceeds the load factor.
     fn maybe_grow(&mut self) {
-        let current_cap = self.index.capacity();
+        let current_cap = self.index.count();
 
         let load_factor = (self.entries.len() + self.deleted) as f64 / current_cap as f64;
 
@@ -361,14 +361,14 @@ where
         if additional == 0 {
             return;
         }
-        self.grow_reindex(self.index.capacity() + additional);
+        self.grow_reindex(self.index.count() + additional);
     }
 
     /// This method will grow the capacity of the map if the current load exceeds the load factor.
     /// If the capacity is zero, it will allocate the initial capacity without reindexing.
     #[inline(always)]
     fn ensure_capacity(&mut self) {
-        if self.index.capacity() == 0 {
+        if self.index.count() == 0 {
             // Allocate initial capacity for the index.
             self.index.allocate(1);
             // Fill the index with empty slots.
@@ -795,7 +795,7 @@ where
     pub fn shrink_to(&mut self, capacity: usize) {
         // Capacity must be less than the current capacity and greater than or equal to the number
         // of elements.
-        if capacity < self.index.capacity() && capacity >= self.entries.len() {
+        if capacity < self.index.count() && capacity >= self.entries.len() {
             // NOTE: This call is safe, because its conditions are checked already.
             self.entries.reallocate(capacity);
             // Reset the index with the new capacity.
@@ -833,7 +833,7 @@ where
     #[inline]
     pub fn shrink_to_fit(&mut self) {
         // Capacity must be greater than the number of elements.
-        if self.index.capacity() > self.entries.len() {
+        if self.index.count() > self.entries.len() {
             // NOTE: This call is safe, because its condition is checked already.
             self.entries.reallocate(self.entries.len());
             // Reset the index with the new capacity.
@@ -871,7 +871,7 @@ where
             return;
         }
         self.entries.drop_init();
-        self.reset_index(self.index.capacity());
+        self.reset_index(self.index.count());
     }
 
     /// Returns an iterator over the key-value pairs in the `OmniMap`.
@@ -960,10 +960,10 @@ where
     /// Returns the current load factor of the `OmniMap` as a ratio.
     #[inline]
     pub fn current_load(&self) -> f64 {
-        if self.index.capacity() == 0 {
+        if self.index.count() == 0 {
             return 0.0;
         }
-        (self.entries.len() + self.deleted) as f64 / self.index.capacity() as f64
+        (self.entries.len() + self.deleted) as f64 / self.index.count() as f64
     }
 
     /// Returns the current memory usage of the `OmniMap` in bytes.
@@ -1808,9 +1808,9 @@ mod tests {
         assert!(map.index.iter().all(|slot| matches!(slot, Slot::Empty)));
         assert_eq!(map.deleted, 0);
         assert_eq!(map.entries.len(), 0);
-        assert_eq!(map.entries.capacity(), 100);
+        assert_eq!(map.entries.count(), 100);
         assert_eq!(map.index.len(), 100);
-        assert_eq!(map.index.capacity(), 100);
+        assert_eq!(map.index.count(), 100);
 
         // Full capacity
         for i in 0..100 {
@@ -1853,9 +1853,9 @@ mod tests {
         assert!(map.index.iter().all(|slot| matches!(slot, Slot::Occupied(_))));
         assert_eq!(map.deleted, 0);
         assert_eq!(map.entries.len(), 75);
-        assert_eq!(map.entries.capacity(), 75);
+        assert_eq!(map.entries.count(), 75);
         assert_eq!(map.index.len(), 75);
-        assert_eq!(map.index.capacity(), 75);
+        assert_eq!(map.index.count(), 75);
 
         // Update entries
         for i in 0..50 {
@@ -1879,9 +1879,9 @@ mod tests {
         assert!(map.index.iter().all(|slot| matches!(slot, Slot::Deleted)));
         assert_eq!(map.deleted, 75);
         assert_eq!(map.entries.len(), 0);
-        assert_eq!(map.entries.capacity(), 75);
+        assert_eq!(map.entries.count(), 75);
         assert_eq!(map.index.len(), 75);
-        assert_eq!(map.index.capacity(), 75);
+        assert_eq!(map.index.count(), 75);
 
         // Insert new entries, the map must be able to reindex successfully
         for i in 0..100 {
@@ -1892,9 +1892,9 @@ mod tests {
         assert!(map.index.iter().all(|slot| !matches!(slot, Slot::Deleted)));
         assert_eq!(map.deleted, 0);
         assert_eq!(map.entries.len(), 100);
-        assert_eq!(map.entries.capacity(), 256);
+        assert_eq!(map.entries.count(), 256);
         assert_eq!(map.index.len(), 256);
-        assert_eq!(map.index.capacity(), 256);
+        assert_eq!(map.index.count(), 256);
 
         // Read updated keys
         for i in 0..100 {
