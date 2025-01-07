@@ -391,6 +391,97 @@ impl<T> BufferPointer<T> {
         self.len += 1;
     }
 
+    /// Returns a reference to an initialized element at the specified index.
+    /// The index must be within the bounds of the initialized elements.
+    ///
+    /// # Safety
+    ///
+    /// - Pointer must be allocated before calling this method.
+    ///   Calling this method with a null pointer will cause termination with `SIGSEGV`.
+    ///
+    /// - Index must be within the bounds of the initialized elements.
+    ///   Loading an uninitialized elements as `T` is `undefined behavior`.
+    ///
+    /// These conditions are checked in debug mode only.
+    ///
+    /// # Time Complexity
+    ///
+    /// _O_(1).
+    ///
+    pub(crate) fn load(&self, index: usize) -> &T {
+        // This check is done only to give specific error messages,
+        // otherwise it is not strictly necessary to ensure safety.
+        #[cfg(debug_assertions)]
+        debug_assert_allocated(self);
+
+        debug_assert!(index < self.len, "Index out of bounds");
+
+        unsafe { &*self.ptr.add(index) }
+    }
+
+    /// Returns a mutable reference to an initialized element at the specified index.
+    /// The index must be within the bounds of the initialized elements.
+    ///
+    /// # Safety
+    ///
+    /// - Pointer must be allocated before calling this method.
+    ///   Calling this method with a null pointer will cause termination with `SIGSEGV`.
+    ///
+    /// - Index must be within the bounds of the initialized elements.
+    ///   Loading an uninitialized elements as `T` is `undefined behavior`.
+    ///
+    /// These conditions are checked in debug mode only.
+    ///
+    /// # Time Complexity
+    ///
+    /// _O_(1).
+    ///
+    pub(crate) fn load_mut(&mut self, index: usize) -> &mut T {
+        // This check is done only to give specific error messages,
+        // otherwise it is not strictly necessary to ensure safety.
+        #[cfg(debug_assertions)]
+        debug_assert_allocated(self);
+
+        debug_assert!(index < self.len, "Index out of bounds");
+        unsafe { &mut *(self.ptr as *mut T).add(index) }
+    }
+
+    /// Returns a slice of the initialized elements within the specified range.
+    /// The range must be within the bounds of the initialized elements.
+    ///
+    /// # Safety
+    ///
+    /// - Pointer must be allocated before calling this method.
+    ///   Calling this method with a null pointer will cause termination with `SIGSEGV`.
+    ///
+    /// - Range must be within the bounds of the initialized elements.
+    ///   Loading an uninitialized elements as values of `T` is `undefined behavior`.
+    ///
+    /// These conditions are checked in debug mode only.
+    ///
+    /// # Time Complexity
+    ///
+    /// _O_(1).
+    ///
+    pub(crate) fn load_range(&self, range: Range<usize>) -> &[T] {
+        // This check is done only to give specific error messages,
+        // otherwise it is not strictly necessary to ensure safety.
+        #[cfg(debug_assertions)]
+        debug_assert_allocated(self);
+
+        // Range must be valid.
+        debug_assert!(
+            range.start <= range.end,
+            "Invalid range: start is greater than end"
+        );
+
+        // Range must be within the bounds of the initialized elements.
+        debug_assert!(range.end <= self.len, "Range is out of bounds");
+        unsafe {
+            std::slice::from_raw_parts(self.ptr.add(range.start), range.end - range.start)
+        }
+    }
+
     /// Returns a reference to the first initialized element.
     ///
     ///
@@ -1244,6 +1335,93 @@ mod tests {
 
         // Verify the rest of the values
         assert_eq!(buffer_ptr[3], 4);
+    }
+
+    #[test]
+    fn test_buffer_ptr_load() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        assert_eq!(buffer_ptr.load(0), &1);
+        assert_eq!(buffer_ptr.load(1), &2);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "Pointer must not be null.")]
+    fn test_buffer_ptr_load_not_allocated() {
+        let buffer_ptr: BufferPointer<u8> = BufferPointer::new();
+        // Not yet allocated, should panic
+        let _ = buffer_ptr.load(0);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "Index out of bounds")]
+    fn test_buffer_ptr_load_out_of_bounds() {
+        let buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        let _ = buffer_ptr.load(0);
+    }
+
+    #[test]
+    fn test_buffer_ptr_load_mut() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        *buffer_ptr.load_mut(0) = 10;
+        assert_eq!(buffer_ptr[0], 10);
+    }
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "Pointer must not be null.")]
+    fn test_buffer_ptr_load_mut_not_allocated() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new();
+        // Not yet allocated, should panic
+        *buffer_ptr.load_mut(0) = 10;
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "Index out of bounds")]
+    fn test_buffer_ptr_load_mut_out_of_bounds() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        *buffer_ptr.load_mut(0) = 10;
+    }
+
+    #[test]
+    fn test_buffer_ptr_load_range() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        buffer_ptr.store_next(3);
+        buffer_ptr.store_next(4);
+        let slice = buffer_ptr.load_range(1..3);
+        assert_eq!(slice, &[2, 3]);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "Pointer must not be null.")]
+    fn test_buffer_ptr_load_range_not_allocated() {
+        let buffer_ptr: BufferPointer<u8> = BufferPointer::new();
+        // Not yet allocated, should panic
+        let _ = buffer_ptr.load_range(0..1);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "Invalid range: start is greater than end")]
+    fn test_buffer_ptr_load_range_invalid_range() {
+        let buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        let _ = buffer_ptr.load_range(3..1);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "Range is out of bounds")]
+    fn test_buffer_ptr_load_range_out_of_bounds() {
+        let buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        let _ = buffer_ptr.load_range(0..1);
     }
 
     #[test]
