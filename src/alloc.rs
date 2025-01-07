@@ -222,7 +222,7 @@ impl<T> BufferPointer<T> {
         self.len
     }
 
-    /// Returns `true` if the `BufferPointer` if the number of initialized elements is `0`.
+    /// Returns `true` if the `BufferPointer` has no initialized elements.
     #[inline]
     pub(crate) const fn is_uninit(&self) -> bool {
         self.len == 0
