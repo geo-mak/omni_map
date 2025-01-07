@@ -37,6 +37,8 @@ fn debug_layout_size_align(size: usize, align: usize) {
 ///
 #[cfg(debug_assertions)]
 fn debug_assert_allocated<T>(instance: &BufferPointer<T>) {
+    // Note: ptr.is_null() and ptr::null() are unstable as const functions,
+    // so this fn can't be made const yet, and we can't use it in const functions.
     assert!(!instance.ptr.is_null(), "Pointer must not be null.");
     assert_ne!(instance.cap, 0, "Capacity must not be zero.");
 }
@@ -52,6 +54,8 @@ fn debug_assert_allocated<T>(instance: &BufferPointer<T>) {
 ///
 #[cfg(debug_assertions)]
 fn debug_assert_not_allocated<T>(instance: &BufferPointer<T>) {
+    // Note: ptr.is_null() and ptr::null() are unstable as const functions,
+    // so this fn can't be made const yet, and we can't use it in const functions.
     assert!(instance.ptr.is_null(), "Pointer must be null.");
     assert_eq!(instance.cap, 0, "Capacity must be zero.");
 }
@@ -62,10 +66,17 @@ fn debug_assert_not_allocated<T>(instance: &BufferPointer<T>) {
 /// `BufferPointer` guarantees proper `alignment` and `size` of `T`, and valid values of type `T`
 /// when storing or loading elements.
 ///
-/// Contrasted with many pointer types, `BufferPointer` stores the count of elements it can refer
-/// to (`cap`), and the number of the currently initialized elements (`len`).
+/// Contrasted with other pointer types, `BufferPointer` stores the count of the elements it can
+/// refer to (`cap`), and the number of the initialized elements (`len`).
 ///
 /// This buffer uses the registered `#[global_allocator]` to allocate memory.
+///
+/// Using custom allocators will be supported in the future, when the allocator API stabilizes.
+///
+/// The lifecycle of the elements is automatically managed by the `BufferPointer`.
+///
+/// When the `BufferPointer` is dropped, it will call `drop` on each initialized element to release
+/// their resources before deallocating the memory space.
 ///
 /// # Safety
 ///
@@ -292,8 +303,8 @@ impl<T> BufferPointer<T> {
             "New capacity must be greater than or equal to the current length."
         );
 
-        let t_size = size_of::<T>(); // Size of T, const
-        let t_align = align_of::<T>(); // Alignment of T, const
+        let t_size = size_of::<T>(); //  const
+        let t_align = align_of::<T>(); // const
 
         // New size
         let new_size = unsafe {
@@ -305,7 +316,7 @@ impl<T> BufferPointer<T> {
         debug_layout_size_align(new_size, t_align);
 
         // Current layout
-        let current_layout = unsafe {
+        let layout = unsafe {
             // Already checked in the `allocate_layout` function
             let current_size = self.cap.unchecked_mul(t_size);
             Layout::from_size_align_unchecked(current_size, t_align)
@@ -313,13 +324,13 @@ impl<T> BufferPointer<T> {
 
         // Reallocate memory space
         let new_ptr = unsafe {
-            alloc::realloc(self.ptr as *mut u8, current_layout, new_size) as *mut T
+            alloc::realloc(self.ptr as *mut u8, layout, new_size) as *mut T
         };
 
         // Check if reallocation failed
         if new_ptr.is_null() {
             // Reallocate failed
-            alloc::handle_alloc_error(current_layout);
+            alloc::handle_alloc_error(layout);
         }
 
         // Update the pointer and capacity
@@ -382,9 +393,11 @@ impl<T> BufferPointer<T> {
         // Cap > len, so the pointer is not null.
         debug_assert!(self.len < self.cap, "Capacity overflow.");
 
+        // Write the value to the next uninitialized element.
         unsafe {
             ptr::write((self.ptr as *mut T).add(self.len), value);
         }
+
         // Update length
         self.len += 1;
     }
@@ -491,7 +504,7 @@ impl<T> BufferPointer<T> {
     #[must_use]
     #[inline(always)]
     pub(crate) const fn load_first(&self) -> &T {
-        // This must be ensured by the caller.
+        // Len > 0, so the pointer is not null.
         debug_assert!(self.len > 0, "Index out of bounds");
         unsafe { &*self.ptr }
     }
@@ -511,7 +524,7 @@ impl<T> BufferPointer<T> {
     #[must_use]
     #[inline(always)]
     pub(crate) const fn load_last(&self) -> &T {
-        // This must be ensured by the caller.
+        // Len > 0, so the pointer is not null.
         debug_assert!(self.len > 0, "Index out of bounds");
         unsafe { &*self.ptr.add(self.len - 1) }
     }
@@ -533,7 +546,7 @@ impl<T> BufferPointer<T> {
     /// _O_(n) where n is the length of the `BufferPointer` minus the index.
     ///
     pub(crate) const fn take(&mut self, index: usize) -> T {
-        // This must be ensured by the caller.
+        // Len > index, so the pointer is not null.
         debug_assert!(index < self.len, "Index out of bounds");
         unsafe {
             // infallible
@@ -592,7 +605,7 @@ impl<T> BufferPointer<T> {
     ///
     #[inline(always)]
     pub(crate) const fn take_last(&mut self) -> T {
-        // This must be ensured by the caller.
+        // Len > 0, so the pointer is not null.
         debug_assert!(self.len > 0, "Index out of bounds");
         self.len -= 1;
         unsafe { ptr::read(self.ptr.add(self.len)) }
@@ -787,14 +800,15 @@ impl<T> Drop for BufferPointer<T> {
     fn drop(&mut self) {
         if !self.ptr.is_null() {
             unsafe {
-                // Already checked in the `allocate_layout` function.
-                // `size_of` and `align_of` are const.
+                // Current layout
                 let layout = Layout::from_size_align_unchecked(
                     self.cap * size_of::<T>(),
                     align_of::<T>()
                 );
+
                 // Call drop on each element to release their resources.
                 ptr::drop_in_place(std::slice::from_raw_parts_mut(self.ptr as *mut T, self.len));
+
                 // Deallocate memory space.
                 alloc::dealloc(self.ptr as *mut u8, layout);
             }
