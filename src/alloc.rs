@@ -377,11 +377,9 @@ impl<T> BufferPointer<T> {
     ///
     /// _O_(1).
     ///
-    #[inline]
-    pub(crate) fn store_next(&mut self, value: T) {
-        // This must be ensured by the caller.
-        #[cfg(debug_assertions)]
-        debug_assert_allocated(self);
+    #[inline(always)]
+    pub(crate) const fn store_next(&mut self, value: T) {
+        // Cap > len, so the pointer is not null.
         debug_assert!(self.len < self.cap, "Capacity overflow.");
 
         unsafe {
@@ -408,12 +406,10 @@ impl<T> BufferPointer<T> {
     ///
     /// _O_(1).
     ///
-    pub(crate) fn load(&self, index: usize) -> &T {
-        // This check is done only to give specific error messages,
-        // otherwise it is not strictly necessary to ensure safety.
-        #[cfg(debug_assertions)]
-        debug_assert_allocated(self);
-
+    #[must_use]
+    #[inline(always)]
+    pub(crate) const fn load(&self, index: usize) -> &T {
+        // Len > index, so the pointer is not null.
         debug_assert!(index < self.len, "Index out of bounds");
 
         unsafe { &*self.ptr.add(index) }
@@ -436,13 +432,12 @@ impl<T> BufferPointer<T> {
     ///
     /// _O_(1).
     ///
-    pub(crate) fn load_mut(&mut self, index: usize) -> &mut T {
-        // This check is done only to give specific error messages,
-        // otherwise it is not strictly necessary to ensure safety.
-        #[cfg(debug_assertions)]
-        debug_assert_allocated(self);
-
+    #[must_use]
+    #[inline(always)]
+    pub(crate) const fn load_mut(&mut self, index: usize) -> &mut T {
+        // Len > index, so the pointer is not null.
         debug_assert!(index < self.len, "Index out of bounds");
+
         unsafe { &mut *(self.ptr as *mut T).add(index) }
     }
 
@@ -463,12 +458,9 @@ impl<T> BufferPointer<T> {
     ///
     /// _O_(1).
     ///
-    pub(crate) fn load_range(&self, range: Range<usize>) -> &[T] {
-        // This check is done only to give specific error messages,
-        // otherwise it is not strictly necessary to ensure safety.
-        #[cfg(debug_assertions)]
-        debug_assert_allocated(self);
-
+    #[must_use]
+    #[inline]
+    pub(crate) const fn load_range(&self, range: Range<usize>) -> &[T] {
         // Range must be valid.
         debug_assert!(
             range.start <= range.end,
@@ -476,7 +468,8 @@ impl<T> BufferPointer<T> {
         );
 
         // Range must be within the bounds of the initialized elements.
-        debug_assert!(range.end <= self.len, "Range is out of bounds");
+        debug_assert!(self.len > 0 && self.len >= range.end, "Range is out of bounds");
+
         unsafe {
             std::slice::from_raw_parts(self.ptr.add(range.start), range.end - range.start)
         }
@@ -496,8 +489,8 @@ impl<T> BufferPointer<T> {
     /// _O_(1).
     ///
     #[must_use]
-    #[inline]
-    pub(crate) fn load_first(&self) -> &T {
+    #[inline(always)]
+    pub(crate) const fn load_first(&self) -> &T {
         // This must be ensured by the caller.
         debug_assert!(self.len > 0, "Index out of bounds");
         unsafe { &*self.ptr }
@@ -516,8 +509,8 @@ impl<T> BufferPointer<T> {
     /// _O_(1).
     ///
     #[must_use]
-    #[inline]
-    pub(crate) fn load_last(&self) -> &T {
+    #[inline(always)]
+    pub(crate) const fn load_last(&self) -> &T {
         // This must be ensured by the caller.
         debug_assert!(self.len > 0, "Index out of bounds");
         unsafe { &*self.ptr.add(self.len - 1) }
@@ -539,7 +532,7 @@ impl<T> BufferPointer<T> {
     ///
     /// _O_(n) where n is the length of the `BufferPointer` minus the index.
     ///
-    pub(crate) fn take(&mut self, index: usize) -> T {
+    pub(crate) const fn take(&mut self, index: usize) -> T {
         // This must be ensured by the caller.
         debug_assert!(index < self.len, "Index out of bounds");
         unsafe {
@@ -567,26 +560,6 @@ impl<T> BufferPointer<T> {
         }
     }
 
-    /// Removes the last initialized element and returns it.
-    ///
-    /// # Safety
-    ///
-    /// This method checks for out of bounds access in debug mode only.
-    ///
-    /// The caller must ensure that the number of initialized elements is greater than `0`.
-    ///
-    /// # Time Complexity
-    ///
-    /// _O_(1).
-    ///
-    #[inline]
-    pub(crate) fn take_last(&mut self) -> T {
-        // This must be ensured by the caller.
-        debug_assert!(self.len > 0, "Index out of bounds");
-        self.len -= 1;
-        unsafe { ptr::read(self.ptr.add(self.len)) }
-    }
-
     /// Removes the first initialized element and returns it.
     ///
     /// # Safety
@@ -599,33 +572,30 @@ impl<T> BufferPointer<T> {
     ///
     /// _O_(n) where n is the length of the `BufferPointer` minus 1.
     ///
-    #[inline]
-    pub(crate) fn take_first(&mut self) -> T {
+    #[inline(always)]
+    pub(crate) const fn take_first(&mut self) -> T {
+        // Debug-mode checked for out-of-bounds access.
+        self.take(0)
+    }
+
+    /// Removes the last initialized element and returns it.
+    ///
+    /// # Safety
+    ///
+    /// This method checks for out of bounds access in debug mode only.
+    ///
+    /// The caller must ensure that the number of initialized elements is greater than `0`.
+    ///
+    /// # Time Complexity
+    ///
+    /// _O_(1).
+    ///
+    #[inline(always)]
+    pub(crate) const fn take_last(&mut self) -> T {
         // This must be ensured by the caller.
         debug_assert!(self.len > 0, "Index out of bounds");
-        unsafe {
-            // infallible
-            let value;
-            {
-                // The old start offset
-                let src = self.ptr as *mut T;
-
-                // The new start offset
-                let dst = src.add(1);
-
-                // Copy value to the stack
-                value = ptr::read(src);
-
-                // Shift everything down to fill in.
-                ptr::copy(dst, src, self.len - 1);
-            }
-
-            // Update len
-            self.len -= 1;
-
-            // Ownership is transferred to the caller
-            value
-        }
+        self.len -= 1;
+        unsafe { ptr::read(self.ptr.add(self.len)) }
     }
 
     /// Calls `drop` on all initialized elements and sets the length to `0`.
@@ -652,7 +622,7 @@ impl<T> BufferPointer<T> {
             ptr::drop_in_place(std::slice::from_raw_parts_mut(self.ptr as *mut T, self.len));
         }
     }
-    
+
     /// Replaces the value at the given index with a new value and returns the old value.
     ///
     /// # Arguments
@@ -669,8 +639,8 @@ impl<T> BufferPointer<T> {
     ///
     /// _O_(1).
     ///
-    #[inline]
-    pub(crate) fn replace(&mut self, index: usize, new_value: T) -> T {
+    #[inline(always)]
+    pub(crate) const fn replace(&mut self, index: usize, new_value: T) -> T {
         // This must be release-mode check because the exposing API is expected to be the same.
         assert!(index < self.len, "Index out of bounds");
         unsafe {
@@ -790,7 +760,7 @@ impl<T> BufferPointer<T> {
             unsafe { std::slice::from_raw_parts_mut(self.ptr as *mut T, self.len).iter_mut() }
         }
     }
-    
+
     /// Returns the current memory usage of the `BufferPointer` in bytes.
     ///
     /// The result is sum of the size of the metadata (ptr, cap and len) and the size of the
@@ -800,6 +770,7 @@ impl<T> BufferPointer<T> {
     /// > The result is only an approximation of the memory usage.
     /// > For example, if `T` is `Box<A>`, the memory usage of `A` will not be included.
     ///
+    #[must_use]
     #[inline]
     pub(crate) fn memory_usage(&self) -> usize {
         // Size of the metadata (ptr, cap and len)
@@ -1192,16 +1163,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(debug_assertions)]
-    #[should_panic(expected = "Pointer must not be null.")]
-    fn test_buffer_ptr_store_next_overflow() {
-        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new();
-
-        // Not yet allocated, should panic
-        buffer_ptr.store_next(1);
-    }
-
-    #[test]
     fn test_buffer_ptr_load() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
         buffer_ptr.store_next(1);
@@ -1210,14 +1171,6 @@ mod tests {
         assert_eq!(buffer_ptr.load(1), &2);
     }
 
-    #[test]
-    #[cfg(debug_assertions)]
-    #[should_panic(expected = "Pointer must not be null.")]
-    fn test_buffer_ptr_load_not_allocated() {
-        let buffer_ptr: BufferPointer<u8> = BufferPointer::new();
-        // Not yet allocated, should panic
-        let _ = buffer_ptr.load(0);
-    }
 
     #[test]
     #[cfg(debug_assertions)]
@@ -1234,14 +1187,6 @@ mod tests {
         buffer_ptr.store_next(2);
         *buffer_ptr.load_mut(0) = 10;
         assert_eq!(buffer_ptr[0], 10);
-    }
-    #[test]
-    #[cfg(debug_assertions)]
-    #[should_panic(expected = "Pointer must not be null.")]
-    fn test_buffer_ptr_load_mut_not_allocated() {
-        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new();
-        // Not yet allocated, should panic
-        *buffer_ptr.load_mut(0) = 10;
     }
 
     #[test]
@@ -1261,15 +1206,6 @@ mod tests {
         buffer_ptr.store_next(4);
         let slice = buffer_ptr.load_range(1..3);
         assert_eq!(slice, &[2, 3]);
-    }
-
-    #[test]
-    #[cfg(debug_assertions)]
-    #[should_panic(expected = "Pointer must not be null.")]
-    fn test_buffer_ptr_load_range_not_allocated() {
-        let buffer_ptr: BufferPointer<u8> = BufferPointer::new();
-        // Not yet allocated, should panic
-        let _ = buffer_ptr.load_range(0..1);
     }
 
     #[test]
