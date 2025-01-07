@@ -342,42 +342,6 @@ impl<T> AllocVec<T> {
         self.len = self.cap;
     }
 
-    /// Shortens the vector, keeping the first len elements and dropping the rest.
-    ///
-    /// Truncating when `len` == `0` is equivalent to calling the clear method.
-    ///
-    /// This method will drop all elements after the specified length.
-    ///
-    /// # Safety
-    ///
-    /// `new_len` must be less than the current length.
-    ///
-    /// This condition is checked in debug mode only.
-    ///
-    /// # Arguments
-    ///
-    /// - `len`: the number of elements to retain.
-    ///
-    /// # Time Complexity
-    ///
-    /// _O_(n) where n is the number of elements to drop (self.len - len).
-    ///
-    pub(crate) fn truncate_unchecked(&mut self, new_len: usize) {
-        // This must be ensured by the caller.
-        debug_assert!(new_len < self.len, "New length must be less than the current length");
-        unsafe {
-            let drop_elements = self.len - new_len;
-            // Get a slice of the elements to drop
-            let drop_slice = ptr::slice_from_raw_parts_mut(
-                self.as_mut_ptr().add(new_len), drop_elements
-            );
-            // Update length first
-            self.len = new_len;
-            // Call drop on each element to release resources.
-            ptr::drop_in_place(drop_slice);
-        }
-    }
-
     /// Stores a value after the last initialized element.
     ///
     /// # Safety
@@ -1361,37 +1325,6 @@ mod tests {
     fn test_alloc_vec_remove_out_of_bounds() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
         assert_eq!(alloc_vec.take(0), 1);
-    }
-
-    #[test]
-    fn test_alloc_vec_truncate_unchecked() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
-
-        assert_eq!(alloc_vec.len(), 0);
-
-        // Add 2 elements
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-
-        // Truncate to length less than current length
-        alloc_vec.truncate_unchecked(1);
-        assert_eq!(alloc_vec.len(), 1);
-        assert_eq!(alloc_vec[0], 1);
-
-        // Truncate to length 0, effectively clearing the vector
-        alloc_vec.truncate_unchecked(0);
-        assert_eq!(alloc_vec.len(), 0);
-    }
-
-    #[test]
-    #[cfg(debug_assertions)]
-    #[should_panic(expected = "New length must be less than the current length")]
-    fn test_alloc_vec_truncate_unchecked_error() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        // This should panic because new length is not less than current length
-        alloc_vec.truncate_unchecked(3);
     }
 
     #[test]
