@@ -5,7 +5,7 @@ use std::fmt::{Debug, Display};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::{Index, IndexMut};
 
-use crate::alloc::{AllocVec, AllocVecIntoIter};
+use crate::alloc::{BufferPointer, BufferPointerIntoIter};
 
 #[derive(Debug)]
 pub struct Entry<K, V> {
@@ -57,8 +57,8 @@ impl Default for Slot {
 
 /// A hybrid data structure that combines the best of both hash maps and vectors.
 pub struct OmniMap<K, V> {
-    entries: AllocVec<Entry<K, V>>,
-    index: AllocVec<Slot>,
+    entries: BufferPointer<Entry<K, V>>,
+    index: BufferPointer<Slot>,
     deleted: usize,
 }
 
@@ -85,9 +85,9 @@ where
     #[inline]
     pub fn new() -> Self {
         OmniMap {
-            // Empty vectors with dangling pointers
-            entries: AllocVec::new(),
-            index: AllocVec::new(),
+            // Unallocated entries and index.
+            entries: BufferPointer::new(),
+            index: BufferPointer::new(),
             deleted: 0,
         }
     }
@@ -113,9 +113,9 @@ where
     pub fn with_capacity(capacity: usize) -> Self {
         OmniMap {
             // Initialize the entries and only reserve capacity
-            entries: AllocVec::new_allocate(capacity),
+            entries: BufferPointer::new_allocate(capacity),
             // Initialize the index with empty slots by calling T::default()
-            index: AllocVec::new_allocate_default(capacity),
+            index: BufferPointer::new_allocate_default(capacity),
             deleted: 0,
         }
     }
@@ -233,7 +233,7 @@ where
     /// Resets the index of the map with a new capacity.
     #[inline(always)]
     fn reset_index(&mut self, cap: usize) {
-        self.index = AllocVec::new_allocate_default(cap);
+        self.index = BufferPointer::new_allocate_default(cap);
         self.deleted = 0;
     }
 
@@ -1093,7 +1093,7 @@ impl<'a, K, V> IntoIterator for &'a mut OmniMap<K, V> {
 }
 
 pub struct OmniMapIntoIter<K, V> {
-    entries: AllocVecIntoIter<Entry<K, V>>,
+    entries: BufferPointerIntoIter<Entry<K, V>>,
 }
 
 impl<K, V> Iterator for OmniMapIntoIter<K, V> {
@@ -1200,7 +1200,7 @@ where
             entries: self.entries.clone_compact(),
             // NOTE: Index can't be compacted because it's length is equal to the capacity,
             // so we allocate a new index with capacity equal to the number of elements.
-            index: AllocVec::new_allocate_default(self.entries.len()),
+            index: BufferPointer::new_allocate_default(self.entries.len()),
             deleted: 0,
         };
         clone.build_index();

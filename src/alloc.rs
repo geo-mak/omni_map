@@ -36,7 +36,7 @@ fn debug_layout_size_align(size: usize, align: usize) {
 /// - The capacity must not be `0`.
 ///
 #[cfg(debug_assertions)]
-fn debug_assert_allocated<T>(instance: &AllocVec<T>) {
+fn debug_assert_allocated<T>(instance: &BufferPointer<T>) {
     assert!(!instance.ptr.is_null(), "Pointer must not be null.");
     assert_ne!(instance.cap, 0, "Capacity must not be zero.");
 }
@@ -51,30 +51,45 @@ fn debug_assert_allocated<T>(instance: &AllocVec<T>) {
 /// - The capacity must be `0`.
 ///
 #[cfg(debug_assertions)]
-fn debug_assert_not_allocated<T>(instance: &AllocVec<T>) {
+fn debug_assert_not_allocated<T>(instance: &BufferPointer<T>) {
     assert!(instance.ptr.is_null(), "Pointer must be null.");
     assert_eq!(instance.cap, 0, "Capacity must be zero.");
 }
 
-/// Raw allocation buffer to enable better control over memory allocation.
+/// `BufferPointer` represents an indirect reference to _one or more_ values of type `T`
+/// consecutively in memory.
 ///
-/// This buffer uses the registered `global allocator` to allocate memory.
+/// `BufferPointer` guarantees proper `alignment` and `size` of `T`, and valid values of type `T`
+/// when storing or loading elements.
+///
+/// Contrasted with many pointer types, `BufferPointer` stores the count of elements it can refer
+/// to (`cap`), and the number of the currently initialized elements (`len`).
+///
+/// This buffer uses the registered `#[global_allocator]` to allocate memory.
 ///
 /// # Safety
 ///
-/// The total size of the allocated memory when rounded up to the nearest multiple of `align`,
-/// must be less than or equal to `isize::MAX`.
+/// - The total size of the allocated memory when rounded up to the nearest multiple of `align`,
+///   must be less than or equal to `isize::MAX`.
 ///
-/// If the total size exceeds `isize::MAX` bytes, the memory allocation will fail.
+///   If the total size exceeds `isize::MAX` bytes, the memory allocation will fail.
+///
+/// - Some methods can be considered `safe`, others might be considered `unsafe`.
+///
+///   Ultimately, the safety of the methods depends on the adherence to the API contract, and
+///   satisfying the preconditions.
+///
+///   For now, all public methods are currently marked as safe, especially that all preconditions
+///   are checked in `debug builds`.
 ///
 /// # Internal representation:
 ///
-/// - `ptr` is a non-null pointer to the first element of the vector.
-/// - `len` is the number of elements in the vector.
-/// - `cap` is the number of elements the vector can hold.
+/// - `ptr` is a raw pointer to the allocated memory space.
+/// - `len` is the number of elements in the pointer.
+/// - `cap` is the number of elements the pointer can hold.
 ///
 /// ```text
-///            ptr  +  len   +  cap     --
+///        raw ptr  +  len   +  cap     --
 ///        *const T |  usize |  usize     |
 ///        +--------+--------+--------+   |
 ///        | 0x0123 |      2 |      4 |   |--> Metadata
@@ -88,23 +103,23 @@ fn debug_assert_not_allocated<T>(instance: &AllocVec<T>) {
 ///             0       1        2        3      --
 ///
 /// ```
-pub(crate) struct AllocVec<T> {
+pub(crate) struct BufferPointer<T> {
     ptr: *const T,
     cap: usize,
     len: usize,
     _marker: PhantomData<T>,
 }
 
-impl<T> AllocVec<T> {
+impl<T> BufferPointer<T> {
 
-    /// Creates a new, empty `AllocVec`.
+    /// Creates a new `BufferPointer` without allocating memory.
+    /// The capacity and length are set to `0`.
     ///
-    /// No memory is allocated, and the length and capacity are set to `0`.
     #[must_use]
     #[inline]
     pub(crate) const fn new() -> Self {
-        // New dangling vector
-        AllocVec {
+        // New instance with no allocation.
+        BufferPointer {
             ptr: ptr::null(),
             cap: 0,
             len: 0,
@@ -112,13 +127,13 @@ impl<T> AllocVec<T> {
         }
     }
 
-    /// Creates a new `AllocVec` with the specified capacity.
+    /// Creates a new `BufferPointer` with the specified capacity.
     ///
-    /// Memory is allocated for the specified capacity, and the length is set to 0.
+    /// Memory is allocated for the specified capacity, and the length is set to `0`.
     ///
     /// # Arguments
     ///
-    /// - `cap` - The capacity of the new `AllocVec`.
+    /// - `cap` - The capacity of the new `BufferPointer`.
     ///
     /// # Panics
     ///
@@ -145,14 +160,14 @@ impl<T> AllocVec<T> {
         instance
     }
 
-    /// Creates a new `AllocVec` with the specified capacity and populates it with the default
+    /// Creates a new `BufferPointer` with the specified capacity and populates it with the default
     /// value of `T`.
     ///
     /// Memory is allocated for the specified capacity, and the length is set to the capacity.
     ///
     /// # Arguments
     ///
-    /// - `cap` - The capacity of the new `AllocVec`.
+    /// - `cap` - The capacity of the new `BufferPointer`.
     ///
     /// # Panics
     ///
@@ -184,25 +199,25 @@ impl<T> AllocVec<T> {
         instance
     }
 
-    /// Returns the capacity of the `AllocVec`.
+    /// Returns the capacity of the `BufferPointer`.
     #[inline]
     pub(crate) const fn capacity(&self) -> usize {
         self.cap
     }
 
-    /// Returns the number of initialized elements in the `AllocVec`.
+    /// Returns the number of initialized elements in the `BufferPointer`.
     #[inline]
     pub(crate) const fn len(&self) -> usize {
         self.len
     }
 
-    /// Returns `true` if the `AllocVec` is empty.
+    /// Returns `true` if the `BufferPointer` is empty.
     #[inline]
     pub(crate) const fn is_empty(&self) -> bool {
         self.len == 0
     }
 
-    /// Allocates memory space for the `AllocVec`.
+    /// Allocates memory space for the `BufferPointer`.
     ///
     /// # Safety
     ///
@@ -325,7 +340,7 @@ impl<T> AllocVec<T> {
     ///
     /// # Time Complexity
     ///
-    /// _O_(n) where n is current capacity of the `AllocVec`.
+    /// _O_(n) where n is current capacity of the `BufferPointer`.
     ///
     #[inline]
     pub(crate) fn memset_default(&mut self)
@@ -348,7 +363,7 @@ impl<T> AllocVec<T> {
     ///
     /// This method will **not** grow the capacity automatically.
     ///
-    /// The caller must ensure that the `AllocVec` has enough capacity to hold the new element.
+    /// The caller must ensure that the `BufferPointer` has enough capacity to hold the new element.
     ///
     /// Calling this method without enough capacity will cause termination with `SIGSEGV`.
     ///
@@ -383,7 +398,7 @@ impl<T> AllocVec<T> {
     ///
     /// This method checks for out of bounds access in debug mode only.
     ///
-    /// The caller must ensure that the `AllocVec` is not empty.
+    /// The caller must ensure that the `BufferPointer` is not empty.
     ///
     /// # Time Complexity
     ///
@@ -403,7 +418,7 @@ impl<T> AllocVec<T> {
     ///
     /// This method checks for out of bounds access in debug mode only.
     ///
-    /// The caller must ensure that the `AllocVec` is not empty.
+    /// The caller must ensure that the `BufferPointer` is not empty.
     ///
     /// # Time Complexity
     ///
@@ -431,7 +446,7 @@ impl<T> AllocVec<T> {
     ///
     /// # Time Complexity
     ///
-    /// _O_(n) where n is the length of the `AllocVec` minus the index.
+    /// _O_(n) where n is the length of the `BufferPointer` minus the index.
     ///
     pub(crate) fn take(&mut self, index: usize) -> T {
         // This must be ensured by the caller.
@@ -491,7 +506,7 @@ impl<T> AllocVec<T> {
     ///
     /// # Time Complexity
     ///
-    /// _O_(n) where n is the length of the `AllocVec` minus 1.
+    /// _O_(n) where n is the length of the `BufferPointer` minus 1.
     ///
     #[inline]
     pub(crate) fn take_first(&mut self) -> T {
@@ -532,7 +547,7 @@ impl<T> AllocVec<T> {
     ///
     /// # Time Complexity
     ///
-    /// _O_(n) where n is the length of the `AllocVec`.
+    /// _O_(n) where n is the length of the `BufferPointer`.
     ///
     #[inline]
     pub(crate) fn drop_init(&mut self) {
@@ -601,7 +616,7 @@ impl<T> AllocVec<T> {
         }
     }
 
-    /// Returns an iterator over the chunks of the `AllocVec`.
+    /// Returns an iterator over the chunks of the `BufferPointer`.
     ///
     /// # Arguments
     ///
@@ -622,7 +637,7 @@ impl<T> AllocVec<T> {
         unsafe { std::slice::from_raw_parts(self.ptr, self.len).chunks(chunk_size) }
     }
 
-    /// Returns an iterator over the mutable chunks of the `AllocVec`.
+    /// Returns an iterator over the mutable chunks of the `BufferPointer`.
     ///
     /// # Arguments
     ///
@@ -645,8 +660,8 @@ impl<T> AllocVec<T> {
         }
     }
 
-    /// Returns an iterator over the elements of the `AllocVec`.
-    /// If the `AllocVec` is empty, the iterator will return an empty slice.
+    /// Returns an iterator over the elements of the `BufferPointer`.
+    /// If the `BufferPointer` is empty, the iterator will return an empty slice.
     ///
     /// # Safety
     ///
@@ -665,8 +680,8 @@ impl<T> AllocVec<T> {
         }
     }
 
-    /// Returns a mutable iterator over the initialized elements of the `AllocVec`.
-    /// If the `AllocVec` is empty, the iterator will return an empty slice.
+    /// Returns a mutable iterator over the initialized elements of the `BufferPointer`.
+    /// If the `BufferPointer` is empty, the iterator will return an empty slice.
     ///
     /// # Safety
     ///
@@ -685,7 +700,7 @@ impl<T> AllocVec<T> {
         }
     }
     
-    /// Returns the current memory usage of the `AllocVec` in bytes.
+    /// Returns the current memory usage of the `BufferPointer` in bytes.
     ///
     /// The result is sum of the size of the metadata (ptr, cap and len) and the size of the
     /// allocated elements.
@@ -705,7 +720,7 @@ impl<T> AllocVec<T> {
     }
 }
 
-impl<T> Drop for AllocVec<T> {
+impl<T> Drop for BufferPointer<T> {
     /// Calls drop on each element and deallocates the memory space.
     fn drop(&mut self) {
         if !self.ptr.is_null() {
@@ -725,8 +740,8 @@ impl<T> Drop for AllocVec<T> {
     }
 }
 
-impl<T> Default for AllocVec<T> {
-    /// Returns the new `AllocVec` with a capacity of 0.
+impl<T> Default for BufferPointer<T> {
+    /// Returns the new `BufferPointer` with a capacity of 0.
     #[must_use]
     #[inline]
     fn default() -> Self {
@@ -734,7 +749,7 @@ impl<T> Default for AllocVec<T> {
     }
 }
 
-impl<T> Index<usize> for AllocVec<T> {
+impl<T> Index<usize> for BufferPointer<T> {
     type Output = T;
 
     /// Returns a reference to the element at the specified index.
@@ -754,7 +769,7 @@ impl<T> Index<usize> for AllocVec<T> {
     }
 }
 
-impl<T> IndexMut<usize> for AllocVec<T> {
+impl<T> IndexMut<usize> for BufferPointer<T> {
     /// Returns a mutable reference to the element at the specified index.
     ///
     /// # Arguments
@@ -772,7 +787,7 @@ impl<T> IndexMut<usize> for AllocVec<T> {
     }
 }
 
-impl<T> Index<Range<usize>> for AllocVec<T> {
+impl<T> Index<Range<usize>> for BufferPointer<T> {
     type Output = [T];
 
     fn index(&self, range: Range<usize>) -> &Self::Output {
@@ -788,7 +803,7 @@ impl<T> Index<Range<usize>> for AllocVec<T> {
     }
 }
 
-impl<T> IndexMut<Range<usize>> for AllocVec<T> {
+impl<T> IndexMut<Range<usize>> for BufferPointer<T> {
     fn index_mut(&mut self, range: Range<usize>) -> &mut Self::Output {
         // This must be release-mode check because the exposing API is expected to be the same.
         assert!(
@@ -805,42 +820,42 @@ impl<T> IndexMut<Range<usize>> for AllocVec<T> {
     }
 }
 
-impl<'a, T> IntoIterator for &'a AllocVec<T> {
+impl<'a, T> IntoIterator for &'a BufferPointer<T> {
     type Item = &'a T;
     type IntoIter = std::slice::Iter<'a, T>;
 
-    /// Returns an iterator over the initialized elements of the `AllocVec`.
+    /// Returns an iterator over the initialized elements of the `BufferPointer`.
     fn into_iter(self) -> Self::IntoIter {
         // This call is safe even if the pointer is null.
         self.iter()
     }
 }
 
-impl<'a, T> IntoIterator for &'a mut AllocVec<T> {
+impl<'a, T> IntoIterator for &'a mut BufferPointer<T> {
     type Item = &'a mut T;
     type IntoIter = std::slice::IterMut<'a, T>;
 
-    /// Returns a mutable iterator over the initialized elements of the `AllocVec`.
+    /// Returns a mutable iterator over the initialized elements of the `BufferPointer`.
     fn into_iter(self) -> Self::IntoIter {
         // This call is safe even if the pointer is null.
         self.iter_mut()
     }
 }
 
-/// An iterator over the initialized elements of the `AllocVec`.
-pub(crate) struct AllocVecIntoIter<T> {
-    vec: AllocVec<T>,
+/// An iterator over the initialized elements of the `BufferPointer`.
+pub(crate) struct BufferPointerIntoIter<T> {
+    buff: BufferPointer<T>,
     index: usize,
 }
 
-impl<T> Iterator for AllocVecIntoIter<T> {
+impl<T> Iterator for BufferPointerIntoIter<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
         // If len > 0, then the pointer is not null.
-        if self.index < self.vec.len {
+        if self.index < self.buff.len {
             unsafe {
-                let item = ptr::read(self.vec.ptr.add(self.index));
+                let item = ptr::read(self.buff.ptr.add(self.index));
                 self.index += 1;
                 Some(item)
             }
@@ -850,20 +865,20 @@ impl<T> Iterator for AllocVecIntoIter<T> {
     }
 }
 
-impl<T> IntoIterator for AllocVec<T> {
+impl<T> IntoIterator for BufferPointer<T> {
     type Item = T;
-    type IntoIter = AllocVecIntoIter<T>;
+    type IntoIter = BufferPointerIntoIter<T>;
 
-    /// Consumes the `AllocVec` and returns an iterator over its initialized elements.
+    /// Consumes the `BufferPointer` and returns an iterator over its initialized elements.
     fn into_iter(self) -> Self::IntoIter {
-        AllocVecIntoIter {
-            vec: self,
+        BufferPointerIntoIter {
+            buff: self,
             index: 0,
         }
     }
 }
 
-impl<T> Deref for AllocVec<T> {
+impl<T> Deref for BufferPointer<T> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
@@ -875,7 +890,7 @@ impl<T> Deref for AllocVec<T> {
     }
 }
 
-impl<T> DerefMut for AllocVec<T> {
+impl<T> DerefMut for BufferPointer<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         if self.len == 0 {
             &mut []
@@ -885,7 +900,7 @@ impl<T> DerefMut for AllocVec<T> {
     }
 }
 
-impl<T: PartialEq> PartialEq for AllocVec<T> {
+impl<T: PartialEq> PartialEq for BufferPointer<T> {
     fn eq(&self, other: &Self) -> bool {
         if self.len != other.len {
             return false;
@@ -894,11 +909,11 @@ impl<T: PartialEq> PartialEq for AllocVec<T> {
     }
 }
 
-impl<T: Clone> AllocVec<T> {
-    /// Clones the `AllocVec` with two possible modes: `compact` or `full`.
+impl<T: Clone> BufferPointer<T> {
+    /// Clones the `BufferPointer` with two possible modes: `compact` or `full`.
     fn clone_in(&self, compact: bool) -> Self {
-        // New dangling vector
-        let mut new_vec = AllocVec {
+        // New instance with no allocation.
+        let mut new_vec = BufferPointer {
             ptr: ptr::null(),
             cap: 0,
             len: 0,
@@ -930,20 +945,20 @@ impl<T: Clone> AllocVec<T> {
         new_vec
     }
 
-    /// Clones the `AllocVec` with capacity equal to the length.
+    /// Clones the `BufferPointer` with capacity equal to the length.
     #[must_use]
     pub(crate) fn clone_compact(&self) -> Self {
         self.clone_in(true)
     }
 }
 
-impl<T: Clone> Clone for AllocVec<T> {
+impl<T: Clone> Clone for BufferPointer<T> {
     fn clone(&self) -> Self {
         self.clone_in(false)
     }
 }
 
-impl<T: Debug> Debug for AllocVec<T> {
+impl<T: Debug> Debug for BufferPointer<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_list().entries(self.iter()).finish()
     }
@@ -954,87 +969,87 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_alloc_vec_new() {
-        let alloc_vec: AllocVec<u8> = AllocVec::new();
+    fn test_buffer_ptr_new() {
+        let buffer_ptr: BufferPointer<u8> = BufferPointer::new();
 
-        assert!(alloc_vec.ptr.is_null());
-        assert_eq!(alloc_vec.capacity(), 0);
-        assert_eq!(alloc_vec.len(), 0);
+        assert!(buffer_ptr.ptr.is_null());
+        assert_eq!(buffer_ptr.capacity(), 0);
+        assert_eq!(buffer_ptr.len(), 0);
     }
 
     #[test]
-    fn test_alloc_vec_new_allocate() {
-        let alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
+    fn test_buffer_ptr_new_allocate() {
+        let buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
 
-        assert!(!alloc_vec.ptr.is_null());
-        assert_eq!(alloc_vec.capacity(), 10);
-        assert_eq!(alloc_vec.len(), 0);
+        assert!(!buffer_ptr.ptr.is_null());
+        assert_eq!(buffer_ptr.capacity(), 10);
+        assert_eq!(buffer_ptr.len(), 0);
     }
 
     #[test]
     #[cfg(debug_assertions)]
-    fn test_alloc_vec_new_allocate_zero_cap() {
-        let alloc_vec: AllocVec<u8> = AllocVec::new_allocate(0);
+    fn test_buffer_ptr_new_allocate_zero_cap() {
+        let buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(0);
 
         // Capacity is 0, no allocation should have been made
-        assert!(alloc_vec.ptr.is_null());
-        assert_eq!(alloc_vec.capacity(), 0);
-        assert_eq!(alloc_vec.len(), 0);
+        assert!(buffer_ptr.ptr.is_null());
+        assert_eq!(buffer_ptr.capacity(), 0);
+        assert_eq!(buffer_ptr.len(), 0);
     }
 
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Size exceeds maximum limit on this platform")]
-    fn test_alloc_vec_new_allocate_overflow() {
-        let _: AllocVec<u8> = AllocVec::new_allocate(isize::MAX as usize + 1);
+    fn test_buffer_ptr_new_allocate_overflow() {
+        let _: BufferPointer<u8> = BufferPointer::new_allocate(isize::MAX as usize + 1);
     }
 
     #[test]
-    fn test_alloc_vec_allocate() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
+    fn test_buffer_ptr_allocate() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new();
 
         // Allocate memory space
-        alloc_vec.allocate(10);
+        buffer_ptr.allocate(10);
 
-        assert!(!alloc_vec.ptr.is_null());
-        assert_eq!(alloc_vec.capacity(), 10);
-        assert_eq!(alloc_vec.len(), 0);
+        assert!(!buffer_ptr.ptr.is_null());
+        assert_eq!(buffer_ptr.capacity(), 10);
+        assert_eq!(buffer_ptr.len(), 0);
     }
 
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Requested capacity must be greater than 0")]
-    fn test_alloc_vec_allocate_zero_cap() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
+    fn test_buffer_ptr_allocate_zero_cap() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new();
 
         // Capacity must be greater than 0, should panic
-        alloc_vec.allocate(0);
+        buffer_ptr.allocate(0);
     }
 
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Size exceeds maximum limit on this platform")]
-    fn test_alloc_vec_allocate_overflow() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
+    fn test_buffer_ptr_allocate_overflow() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new();
 
         // Size exceeds maximum limit, should panic
-        alloc_vec.allocate(isize::MAX as usize + 1);
+        buffer_ptr.allocate(isize::MAX as usize + 1);
     }
 
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Pointer must be null.")]
-    fn test_alloc_vec_allocate_allocated() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
+    fn test_buffer_ptr_allocate_allocated() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new();
 
         // Not yet allocated, should not panic
-        alloc_vec.allocate(1);
+        buffer_ptr.allocate(1);
 
-        assert!(!alloc_vec.ptr.is_null());
-        assert_eq!(alloc_vec.capacity(), 1);
+        assert!(!buffer_ptr.ptr.is_null());
+        assert_eq!(buffer_ptr.capacity(), 1);
 
         // Already allocated, should panic
-        alloc_vec.allocate(2);
+        buffer_ptr.allocate(2);
     }
 
     #[allow(dead_code)]
@@ -1050,108 +1065,108 @@ mod tests {
     }
 
     #[test]
-    fn test_alloc_vec_memset_default() {
-        let mut alloc_vec: AllocVec<Choice> = AllocVec::new_allocate(10);
-        assert_eq!(alloc_vec.capacity(), 10);
-        assert_eq!(alloc_vec.len(), 0);
+    fn test_buffer_ptr_memset_default() {
+        let mut buffer_ptr: BufferPointer<Choice> = BufferPointer::new_allocate(10);
+        assert_eq!(buffer_ptr.capacity(), 10);
+        assert_eq!(buffer_ptr.len(), 0);
 
         // Set all elements to the default value of `Choice`
-        alloc_vec.memset_default();
+        buffer_ptr.memset_default();
 
         // Len was 0, so it should be updated to 10
-        assert_eq!(alloc_vec.len(), 10);
+        assert_eq!(buffer_ptr.len(), 10);
 
         // Values were uninit, so they should be set to `Default`
         for i in 0..10 {
-            assert!(matches!(alloc_vec[i], Choice::Default))
+            assert!(matches!(buffer_ptr[i], Choice::Default))
         }
     }
 
     #[test]
-    fn test_alloc_vec_new_allocate_default() {
+    fn test_buffer_ptr_new_allocate_default() {
         let capacity = 5;
-        let alloc_vec: AllocVec<Choice> = AllocVec::new_allocate_default(capacity);
+        let buffer_ptr: BufferPointer<Choice> = BufferPointer::new_allocate_default(capacity);
 
         // Memory space should have been allocated
-        assert!(!alloc_vec.ptr.is_null());
-        assert_eq!(alloc_vec.capacity(), capacity);
-        assert_eq!(alloc_vec.len(), capacity);
+        assert!(!buffer_ptr.ptr.is_null());
+        assert_eq!(buffer_ptr.capacity(), capacity);
+        assert_eq!(buffer_ptr.len(), capacity);
 
         // All elements are must have been initialized to their default values
         for i in 0..capacity {
-            assert!(matches!(alloc_vec[i], Choice::Default))
+            assert!(matches!(buffer_ptr[i], Choice::Default))
         }
     }
 
     #[test]
-    fn test_alloc_vec_new_allocate_default_zero_cap() {
-        let alloc_vec: AllocVec<u8> = AllocVec::new_allocate_default(0);
+    fn test_buffer_ptr_new_allocate_default_zero_cap() {
+        let buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate_default(0);
 
         // Capacity is 0, no allocation should have been made
-        assert!(alloc_vec.ptr.is_null());
-        assert_eq!(alloc_vec.capacity(), 0);
-        assert_eq!(alloc_vec.len(), 0);
+        assert!(buffer_ptr.ptr.is_null());
+        assert_eq!(buffer_ptr.capacity(), 0);
+        assert_eq!(buffer_ptr.len(), 0);
     }
 
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Size exceeds maximum limit on this platform")]
-    fn test_alloc_vec_new_allocate_default_overflow() {
-        let _: AllocVec<u8> = AllocVec::new_allocate_default(isize::MAX as usize + 1);
+    fn test_buffer_ptr_new_allocate_default_overflow() {
+        let _: BufferPointer<u8> = BufferPointer::new_allocate_default(isize::MAX as usize + 1);
     }
 
     #[test]
-    fn test_alloc_vec_reallocate() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
-        assert_eq!(alloc_vec.capacity(), 3);
+    fn test_buffer_ptr_reallocate() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(3);
+        assert_eq!(buffer_ptr.capacity(), 3);
 
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        alloc_vec.store_next(3);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        buffer_ptr.store_next(3);
 
-        assert_eq!(alloc_vec.len(), 3);
+        assert_eq!(buffer_ptr.len(), 3);
 
         // Grows the capacity to 5
-        alloc_vec.reallocate(5);
+        buffer_ptr.reallocate(5);
 
-        assert_eq!(alloc_vec.capacity(), 5);
+        assert_eq!(buffer_ptr.capacity(), 5);
 
         // Check values after reallocation
         for i in 0..3 {
-            assert_eq!(alloc_vec[i], i as u8 + 1);
+            assert_eq!(buffer_ptr[i], i as u8 + 1);
         }
     }
 
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Pointer must not be null.")]
-    fn test_alloc_vec_reallocate_null_ptr() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
+    fn test_buffer_ptr_reallocate_null_ptr() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new();
 
         // Not yet allocated, should panic
-        alloc_vec.reallocate(10);
+        buffer_ptr.reallocate(10);
     }
 
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "New capacity must be greater than or equal to the current length")]
-    fn test_alloc_vec_reallocate_less_than_len() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        alloc_vec.store_next(3);
+    fn test_buffer_ptr_reallocate_less_than_len() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(3);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        buffer_ptr.store_next(3);
 
         // New capacity is less than the current length, should panic
-        alloc_vec.reallocate(2);
+        buffer_ptr.reallocate(2);
     }
 
     #[test]
-    fn test_alloc_vec_push() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.store_next(2);
-        assert_eq!(alloc_vec.len(), 1);
+    fn test_buffer_ptr_push() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(2);
+        assert_eq!(buffer_ptr.len(), 1);
 
-        let pushed_value = unsafe { *alloc_vec.ptr };
+        let pushed_value = unsafe { *buffer_ptr.ptr };
 
         assert_eq!(pushed_value, 2);
     }
@@ -1159,193 +1174,193 @@ mod tests {
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Pointer must not be null.")]
-    fn test_alloc_vec_push_overflow() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
+    fn test_buffer_ptr_push_overflow() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new();
 
         // Not yet allocated, should panic
-        alloc_vec.store_next(1);
+        buffer_ptr.store_next(1);
     }
 
     #[test]
-    fn test_alloc_vec_index() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        assert_eq!(alloc_vec[0], 1);
-        assert_eq!(alloc_vec[1], 2);
+    fn test_buffer_ptr_index() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        assert_eq!(buffer_ptr[0], 1);
+        assert_eq!(buffer_ptr[1], 2);
     }
 
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Index out of bounds")]
-    fn test_alloc_vec_index_out_of_bounds() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.store_next(10);
+    fn test_buffer_ptr_index_out_of_bounds() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(10);
 
         // Index out of bounds, should panic
-        let _ = alloc_vec[1];
+        let _ = buffer_ptr[1];
     }
 
     #[test]
-    fn test_alloc_vec_index_mut() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.store_next(1);
-        alloc_vec[0] = 2;
-        assert_eq!(alloc_vec[0], 2);
+    fn test_buffer_ptr_index_mut() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(1);
+        buffer_ptr[0] = 2;
+        assert_eq!(buffer_ptr[0], 2);
     }
 
     #[test]
-    fn test_alloc_vec_index_range() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        alloc_vec.store_next(3);
-        alloc_vec.store_next(4);
+    fn test_buffer_ptr_index_range() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        buffer_ptr.store_next(3);
+        buffer_ptr.store_next(4);
 
         // Read values in the range [1, 3)
-        let slice = &alloc_vec[1..3];
+        let slice = &buffer_ptr[1..3];
 
         // Verify the values
         assert_eq!(slice, &[2, 3]);
     }
 
     #[test]
-    fn test_alloc_vec_index_range_mut() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        alloc_vec.store_next(3);
-        alloc_vec.store_next(4);
+    fn test_buffer_ptr_index_range_mut() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        buffer_ptr.store_next(3);
+        buffer_ptr.store_next(4);
 
         // Mutate values in the range [1, 4)
-        for value in &mut alloc_vec[1..3] {
+        for value in &mut buffer_ptr[1..3] {
             *value *= 2;
         }
 
         // Verify the changes
-        assert_eq!(alloc_vec[0], 1);
-        assert_eq!(alloc_vec[1], 4);
-        assert_eq!(alloc_vec[2], 6);
+        assert_eq!(buffer_ptr[0], 1);
+        assert_eq!(buffer_ptr[1], 4);
+        assert_eq!(buffer_ptr[2], 6);
 
         // Verify the rest of the values
-        assert_eq!(alloc_vec[3], 4);
+        assert_eq!(buffer_ptr[3], 4);
     }
 
     #[test]
-    fn test_alloc_vec_first() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        assert_eq!(alloc_vec.load_first(), &1);
-    }
-
-    #[test]
-    #[cfg(debug_assertions)]
-    #[should_panic(expected = "Index out of bounds")]
-    fn test_alloc_vec_first_out_of_bounds() {
-        let alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        let _ = alloc_vec.load_first();
-    }
-
-    #[test]
-    fn test_alloc_vec_last() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        assert_eq!(alloc_vec.load_last(), &2);
+    fn test_buffer_ptr_first() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        assert_eq!(buffer_ptr.load_first(), &1);
     }
 
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Index out of bounds")]
-    fn test_alloc_vec_last_out_of_bounds() {
-        let alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        let _ = alloc_vec.load_last();
+    fn test_buffer_ptr_first_out_of_bounds() {
+        let buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        let _ = buffer_ptr.load_first();
     }
 
     #[test]
-    fn test_alloc_vec_pop_front() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        alloc_vec.store_next(3);
-        assert_eq!(alloc_vec.take_first(), 1);
-        assert_eq!(alloc_vec.len(), 2);
-        assert_eq!(alloc_vec[0], 2);
-        assert_eq!(alloc_vec[1], 3);
+    fn test_buffer_ptr_last() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        assert_eq!(buffer_ptr.load_last(), &2);
     }
 
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Index out of bounds")]
-    fn test_alloc_vec_pop_front_out_of_bounds() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.take_first();
+    fn test_buffer_ptr_last_out_of_bounds() {
+        let buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        let _ = buffer_ptr.load_last();
     }
 
     #[test]
-    fn test_alloc_vec_pop() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.store_next(42);
-        assert_eq!(alloc_vec.take_last(), 42);
-        assert_eq!(alloc_vec.len(), 0);
-    }
-
-    #[test]
-    #[cfg(debug_assertions)]
-    #[should_panic(expected = "Index out of bounds")]
-    fn test_alloc_vec_pop_out_of_bounds() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.take_last();
-    }
-
-    #[test]
-    fn test_alloc_vec_remove() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        assert_eq!(alloc_vec.take(0), 1);
-        assert_eq!(alloc_vec.len(), 1);
-        assert_eq!(alloc_vec[0], 2);
+    fn test_buffer_ptr_pop_front() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        buffer_ptr.store_next(3);
+        assert_eq!(buffer_ptr.take_first(), 1);
+        assert_eq!(buffer_ptr.len(), 2);
+        assert_eq!(buffer_ptr[0], 2);
+        assert_eq!(buffer_ptr[1], 3);
     }
 
     #[test]
     #[cfg(debug_assertions)]
     #[should_panic(expected = "Index out of bounds")]
-    fn test_alloc_vec_remove_out_of_bounds() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        assert_eq!(alloc_vec.take(0), 1);
+    fn test_buffer_ptr_pop_front_out_of_bounds() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.take_first();
     }
 
     #[test]
-    fn test_alloc_vec_swap() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        alloc_vec.store_next(3);
-        alloc_vec.swap(0, 2);
-        assert_eq!(alloc_vec[0], 3);
-        assert_eq!(alloc_vec[2], 1);
+    fn test_buffer_ptr_pop() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(42);
+        assert_eq!(buffer_ptr.take_last(), 42);
+        assert_eq!(buffer_ptr.len(), 0);
     }
 
     #[test]
-    fn test_alloc_vec_replace() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        alloc_vec.store_next(3);
-        let old_value = alloc_vec.replace(1, 10);
-        assert_eq!(alloc_vec[1], 10);
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "Index out of bounds")]
+    fn test_buffer_ptr_pop_out_of_bounds() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.take_last();
+    }
+
+    #[test]
+    fn test_buffer_ptr_remove() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        assert_eq!(buffer_ptr.take(0), 1);
+        assert_eq!(buffer_ptr.len(), 1);
+        assert_eq!(buffer_ptr[0], 2);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "Index out of bounds")]
+    fn test_buffer_ptr_remove_out_of_bounds() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        assert_eq!(buffer_ptr.take(0), 1);
+    }
+
+    #[test]
+    fn test_buffer_ptr_swap() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(3);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        buffer_ptr.store_next(3);
+        buffer_ptr.swap(0, 2);
+        assert_eq!(buffer_ptr[0], 3);
+        assert_eq!(buffer_ptr[2], 1);
+    }
+
+    #[test]
+    fn test_buffer_ptr_replace() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(3);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        buffer_ptr.store_next(3);
+        let old_value = buffer_ptr.replace(1, 10);
+        assert_eq!(buffer_ptr[1], 10);
         assert_eq!(old_value, 2);
     }
 
     #[test]
-    fn test_alloc_vec_iter() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        alloc_vec.store_next(3);
-        let mut iter = alloc_vec.iter();
+    fn test_buffer_ptr_iter() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        buffer_ptr.store_next(3);
+        let mut iter = buffer_ptr.iter();
         assert_eq!(iter.next(), Some(&1));
         assert_eq!(iter.next(), Some(&2));
         assert_eq!(iter.next(), Some(&3));
@@ -1353,15 +1368,15 @@ mod tests {
     }
 
     #[test]
-    fn test_alloc_vec_iter_mut() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        alloc_vec.store_next(3);
-        for value in alloc_vec.iter_mut() {
+    fn test_buffer_ptr_iter_mut() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        buffer_ptr.store_next(3);
+        for value in buffer_ptr.iter_mut() {
             *value *= 2;
         }
-        let mut iter = alloc_vec.iter();
+        let mut iter = buffer_ptr.iter();
         assert_eq!(iter.next(), Some(&2));
         assert_eq!(iter.next(), Some(&4));
         assert_eq!(iter.next(), Some(&6));
@@ -1369,30 +1384,30 @@ mod tests {
     }
 
     #[test]
-    fn test_alloc_vec_for_loop() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        alloc_vec.store_next(3);
+    fn test_buffer_ptr_for_loop() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(3);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        buffer_ptr.store_next(3);
         let mut sum = 0;
         // Immutable borrow
-        for value in &alloc_vec {
+        for value in &buffer_ptr {
             sum += *value;
         }
         assert_eq!(sum, 6);
     }
 
     #[test]
-    fn test_alloc_vec_for_loop_mut() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        alloc_vec.store_next(3);
+    fn test_buffer_ptr_for_loop_mut() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(3);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        buffer_ptr.store_next(3);
         // Mutable borrow
-        for value in &mut alloc_vec {
+        for value in &mut buffer_ptr {
             *value *= 2;
         }
-        let mut iter = alloc_vec.iter();
+        let mut iter = buffer_ptr.iter();
         assert_eq!(iter.next(), Some(&2));
         assert_eq!(iter.next(), Some(&4));
         assert_eq!(iter.next(), Some(&6));
@@ -1400,12 +1415,12 @@ mod tests {
     }
 
     #[test]
-    fn test_alloc_vec_into_iterator(){
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        alloc_vec.store_next(3);
-        let mut iter: AllocVecIntoIter<u8> = alloc_vec.into_iter();
+    fn test_buffer_ptr_into_iterator(){
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(3);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        buffer_ptr.store_next(3);
+        let mut iter: BufferPointerIntoIter<u8> = buffer_ptr.into_iter();
         assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.next(), Some(2));
         assert_eq!(iter.next(), Some(3));
@@ -1413,52 +1428,52 @@ mod tests {
     }
 
     #[test]
-    fn test_alloc_vec_deref_empty() {
-        let alloc_vec: AllocVec<u8> = AllocVec::new();
-        let slice: &[u8] = &*alloc_vec;
+    fn test_buffer_ptr_deref_empty() {
+        let buffer_ptr: BufferPointer<u8> = BufferPointer::new();
+        let slice: &[u8] = &*buffer_ptr;
         assert!(slice.is_empty());
     }
 
     #[test]
-    fn test_alloc_vec_deref() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        alloc_vec.store_next(3);
-        let slice: &[u8] = &*alloc_vec;
+    fn test_buffer_ptr_deref() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        buffer_ptr.store_next(3);
+        let slice: &[u8] = &*buffer_ptr;
         assert_eq!(slice, &[1, 2, 3]);
     }
 
     #[test]
-    fn test_alloc_vec_deref_mut_empty() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new();
-        let slice: &mut [u8] = &mut *alloc_vec;
+    fn test_buffer_ptr_deref_mut_empty() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new();
+        let slice: &mut [u8] = &mut *buffer_ptr;
         assert!(slice.is_empty());
     }
 
     #[test]
-    fn test_alloc_vec_deref_mut() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        alloc_vec.store_next(3);
-        let slice: &mut [u8] = &mut *alloc_vec;
+    fn test_buffer_ptr_deref_mut() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        buffer_ptr.store_next(3);
+        let slice: &mut [u8] = &mut *buffer_ptr;
         slice[0] = 10;
         assert_eq!(slice, &[10, 2, 3]);
     }
 
     #[test]
-    fn test_alloc_vec_clear() {
-        let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.store_next(1);
-        alloc_vec.store_next(2);
-        alloc_vec.store_next(3);
-        alloc_vec.drop_init();
-        assert_eq!(alloc_vec.len(), 0);
+    fn test_buffer_ptr_clear() {
+        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        buffer_ptr.store_next(1);
+        buffer_ptr.store_next(2);
+        buffer_ptr.store_next(3);
+        buffer_ptr.drop_init();
+        assert_eq!(buffer_ptr.len(), 0);
     }
 
     #[test]
-    fn test_alloc_vec_drop() {
+    fn test_buffer_ptr_drop() {
         use std::rc::Rc;
         use std::cell::RefCell;
 
@@ -1477,33 +1492,33 @@ mod tests {
         // Drop counter with 0 count initially.
         let drop_count = Rc::new(RefCell::new(0));
 
-        let mut alloc_vec: AllocVec<DropCounter> = AllocVec::new_allocate(3);
+        let mut buffer_ptr: BufferPointer<DropCounter> = BufferPointer::new_allocate(3);
 
         // Reference 3 elements to the same drop counter.
-        alloc_vec.store_next(DropCounter { count: Rc::clone(&drop_count) });
-        alloc_vec.store_next(DropCounter { count: Rc::clone(&drop_count) });
-        alloc_vec.store_next(DropCounter { count: Rc::clone(&drop_count) });
+        buffer_ptr.store_next(DropCounter { count: Rc::clone(&drop_count) });
+        buffer_ptr.store_next(DropCounter { count: Rc::clone(&drop_count) });
+        buffer_ptr.store_next(DropCounter { count: Rc::clone(&drop_count) });
 
-        assert_eq!(alloc_vec.len(), 3);
+        assert_eq!(buffer_ptr.len(), 3);
 
-        // Drop the vector
-        drop(alloc_vec);
+        // Drop the buffer.
+        drop(buffer_ptr);
 
-        // Since the `drop` has been called, vector should have called drop on all elements,
+        // Since the `drop` has been called, pointer should have called drop on all elements,
         // so the drop count must be 3.
         assert_eq!(*drop_count.borrow(), 3);
     }
 
     #[test]
-    fn test_alloc_vec_memory_usage() {
-        let vec: AllocVec<u8> = AllocVec::new_allocate(10);
+    fn test_buffer_ptr_memory_usage() {
+        let vec: BufferPointer<u8> = BufferPointer::new_allocate(10);
         let expected_memory_usage = size_of::<usize>() * 3 + 10 * size_of::<i8>();
         assert_eq!(vec.memory_usage(), expected_memory_usage);
     }
 
     #[test]
-    fn test_alloc_vec_clone_empty() {
-        let original: AllocVec<u8> = AllocVec::new();
+    fn test_buffer_ptr_clone_empty() {
+        let original: BufferPointer<u8> = BufferPointer::new();
         let cloned = original.clone();
 
         // Cloned must have the same length and capacity
@@ -1515,8 +1530,8 @@ mod tests {
     }
 
     #[test]
-    fn test_alloc_vec_clone() {
-        let mut original: AllocVec<u8> = AllocVec::new_allocate(10);
+    fn test_buffer_ptr_clone() {
+        let mut original: BufferPointer<u8> = BufferPointer::new_allocate(10);
         original.store_next(1);
         original.store_next(2);
         original.store_next(3);
@@ -1540,8 +1555,8 @@ mod tests {
     }
 
     #[test]
-    fn test_alloc_vec_clone_compact() {
-        let mut original: AllocVec<u8> = AllocVec::new_allocate(10);
+    fn test_buffer_ptr_clone_compact() {
+        let mut original: BufferPointer<u8> = BufferPointer::new_allocate(10);
 
         original.store_next(1);
         original.store_next(2);
@@ -1578,40 +1593,40 @@ mod tests {
     }
 
     #[test]
-    fn test_alloc_vec_equality() {
-        let mut vec1: AllocVec<u8> = AllocVec::new_allocate(3);
+    fn test_buffer_ptr_equality() {
+        let mut vec1: BufferPointer<u8> = BufferPointer::new_allocate(3);
         vec1.store_next(1);
         vec1.store_next(2);
         vec1.store_next(3);
 
-        let mut vec2: AllocVec<u8> = AllocVec::new_allocate(3);
+        let mut vec2: BufferPointer<u8> = BufferPointer::new_allocate(3);
         vec2.store_next(1);
         vec2.store_next(2);
         vec2.store_next(3);
 
-        // Vectors with the same elements must be equal
+        // pointers with the same elements must be equal
         assert_eq!(vec1, vec2);
 
-        let mut vec3: AllocVec<u8> = AllocVec::new_allocate(3);
+        let mut vec3: BufferPointer<u8> = BufferPointer::new_allocate(3);
         vec3.store_next(4);
         vec3.store_next(5);
         vec3.store_next(6);
 
-        // Vectors with different elements must not be equal
+        // pointers with different elements must not be equal
         assert_ne!(vec1, vec3);
 
-        let mut vec4: AllocVec<u8> = AllocVec::new_allocate(4);
+        let mut vec4: BufferPointer<u8> = BufferPointer::new_allocate(4);
         vec4.store_next(1);
         vec4.store_next(2);
         vec4.store_next(3);
 
-        // Vectors with the same elements but different capacities must be equal
+        // pointers with the same elements but different capacities must be equal
         assert_eq!(vec1, vec4);
     }
 
     #[test]
-    fn test_alloc_vec_debug() {
-        let mut vec: AllocVec<u8> = AllocVec::new_allocate(3);
+    fn test_buffer_ptr_debug() {
+        let mut vec: BufferPointer<u8> = BufferPointer::new_allocate(3);
         vec.store_next(1);
         vec.store_next(2);
         vec.store_next(3);
