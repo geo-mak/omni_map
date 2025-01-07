@@ -445,7 +445,7 @@ where
                 );
 
                 // Insert the new key-value pair
-                self.entries.push_no_grow(Entry::new(key, value, hash));
+                self.entries.store_next(Entry::new(key, value, hash));
                 let entry_index = self.entries.len() - 1;
                 self.index[slot_index] = Slot::Occupied(entry_index);
                 None
@@ -568,7 +568,7 @@ where
             return None;
         }
         // This is safe because the map is not empty
-        let entry = self.entries.first();
+        let entry = self.entries.load_first();
         Some((&entry.key, &entry.value))
     }
 
@@ -603,7 +603,7 @@ where
             return None;
         }
         // This is safe because the map is not empty
-        let entry = self.entries.last();
+        let entry = self.entries.load_last();
         Some((&entry.key, &entry.value))
     }
 
@@ -662,10 +662,10 @@ where
             // Call remove or pop based on the index
             if index == self.entries.len() - 1 {
                 // This is safe because the map is not empty
-                entry = self.entries.pop();
+                entry = self.entries.take_last();
                 self.index[slot] = Slot::Deleted;
             } else {
-                entry = self.entries.remove(index);
+                entry = self.entries.take(index);
                 self.index[slot] = Slot::Deleted;
                 self.decrement_index(index);
             }
@@ -711,7 +711,7 @@ where
             return None;
         }
         // This is safe because the map is not empty
-        let entry = self.entries.pop_front();
+        let entry = self.entries.take_first();
         self.decrement_index(0);
         // Add the deleted slot to the deleted counter
         self.deleted += 1;
@@ -749,11 +749,11 @@ where
         if self.is_empty() {
             return None;
         }
-        let entry = self.entries.last();
+        let entry = self.entries.load_last();
         if let (slot, Some(_)) = self.find_slot(entry.hash, &entry.key) {
             self.index[slot] = Slot::Deleted;
             // This is safe because the map is not empty
-            let entry = self.entries.pop();
+            let entry = self.entries.take_last();
             // Add the deleted slot to the deleted counter
             self.deleted += 1;
             return Some((entry.key, entry.value));
@@ -870,7 +870,7 @@ where
         if self.is_empty() {
             return;
         }
-        self.entries.clear();
+        self.entries.drop_init();
         self.reset_index(self.index.capacity());
     }
 

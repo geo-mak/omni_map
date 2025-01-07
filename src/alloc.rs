@@ -397,7 +397,7 @@ impl<T> AllocVec<T> {
     /// _O_(1).
     ///
     #[inline]
-    pub(crate) fn push_no_grow(&mut self, value: T) {
+    pub(crate) fn store_next(&mut self, value: T) {
         // This must be ensured by the caller.
         #[cfg(debug_assertions)]
         debug_assert_allocated(self);
@@ -425,7 +425,7 @@ impl<T> AllocVec<T> {
     ///
     #[must_use]
     #[inline]
-    pub(crate) fn first(&self) -> &T {
+    pub(crate) fn load_first(&self) -> &T {
         // This must be ensured by the caller.
         debug_assert!(self.len > 0, "Index out of bounds");
         unsafe { &*self.ptr }
@@ -445,7 +445,7 @@ impl<T> AllocVec<T> {
     ///
     #[must_use]
     #[inline]
-    pub(crate) fn last(&self) -> &T {
+    pub(crate) fn load_last(&self) -> &T {
         // This must be ensured by the caller.
         debug_assert!(self.len > 0, "Index out of bounds");
         unsafe { &*self.ptr.add(self.len - 1) }
@@ -467,7 +467,7 @@ impl<T> AllocVec<T> {
     ///
     /// _O_(n) where n is the length of the `AllocVec` minus the index.
     ///
-    pub(crate) fn remove(&mut self, index: usize) -> T {
+    pub(crate) fn take(&mut self, index: usize) -> T {
         // This must be ensured by the caller.
         debug_assert!(index < self.len, "Index out of bounds");
         unsafe {
@@ -508,7 +508,7 @@ impl<T> AllocVec<T> {
     /// _O_(1).
     ///
     #[inline]
-    pub(crate) fn pop(&mut self) -> T {
+    pub(crate) fn take_last(&mut self) -> T {
         // This must be ensured by the caller.
         debug_assert!(self.len > 0, "Index out of bounds");
         self.len -= 1;
@@ -528,7 +528,7 @@ impl<T> AllocVec<T> {
     /// _O_(n) where n is the length of the `AllocVec` minus 1.
     ///
     #[inline]
-    pub(crate) fn pop_front(&mut self) -> T {
+    pub(crate) fn take_first(&mut self) -> T {
         // This must be ensured by the caller.
         debug_assert!(self.len > 0, "Index out of bounds");
         unsafe {
@@ -701,14 +701,15 @@ impl<T> AllocVec<T> {
     /// _O_(n) where n is the length of the `AllocVec`.
     ///
     #[inline]
-    pub(crate) fn clear(&mut self) {
-        if self.len != 0 {
-            // Update len first
-            self.len = 0;
-            unsafe {
-                // Call drop on each element to release resources.
-                ptr::drop_in_place(std::slice::from_raw_parts_mut(self.ptr as *mut T, self.len));
-            }
+    pub(crate) fn drop_init(&mut self) {
+        #[cfg(debug_assertions)]
+        debug_assert_allocated(self);
+
+        // Update len first
+        self.len = 0;
+        unsafe {
+            // Call drop on each element to release resources.
+            ptr::drop_in_place(std::slice::from_raw_parts_mut(self.ptr as *mut T, self.len));
         }
     }
 
@@ -894,7 +895,7 @@ impl<T> FromIterator<T> for AllocVec<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let mut alloc_vec = AllocVec::new();
         for item in iter {
-            alloc_vec.push_no_grow(item);
+            alloc_vec.store_next(item);
         }
         alloc_vec
     }
@@ -1142,9 +1143,9 @@ mod tests {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
         assert_eq!(alloc_vec.capacity(), 3);
 
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        alloc_vec.store_next(3);
 
         assert_eq!(alloc_vec.len(), 3);
 
@@ -1174,9 +1175,9 @@ mod tests {
     #[should_panic(expected = "New capacity must be greater than or equal to the current length")]
     fn test_alloc_vec_reallocate_less_than_len() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        alloc_vec.store_next(3);
 
         // New capacity is less than the current length, should panic
         alloc_vec.reallocate(2);
@@ -1185,7 +1186,7 @@ mod tests {
     #[test]
     fn test_alloc_vec_push() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(2);
+        alloc_vec.store_next(2);
         assert_eq!(alloc_vec.len(), 1);
 
         let pushed_value = unsafe { *alloc_vec.ptr };
@@ -1200,14 +1201,14 @@ mod tests {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new();
 
         // Not yet allocated, should panic
-        alloc_vec.push_no_grow(1);
+        alloc_vec.store_next(1);
     }
 
     #[test]
     fn test_alloc_vec_index() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
         assert_eq!(alloc_vec[0], 1);
         assert_eq!(alloc_vec[1], 2);
     }
@@ -1217,7 +1218,7 @@ mod tests {
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_index_out_of_bounds() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(10);
+        alloc_vec.store_next(10);
 
         // Index out of bounds, should panic
         let _ = alloc_vec[1];
@@ -1226,7 +1227,7 @@ mod tests {
     #[test]
     fn test_alloc_vec_index_mut() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(1);
+        alloc_vec.store_next(1);
         alloc_vec[0] = 2;
         assert_eq!(alloc_vec[0], 2);
     }
@@ -1234,10 +1235,10 @@ mod tests {
     #[test]
     fn test_alloc_vec_index_range() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
-        alloc_vec.push_no_grow(4);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        alloc_vec.store_next(3);
+        alloc_vec.store_next(4);
 
         // Read values in the range [1, 3)
         let slice = &alloc_vec[1..3];
@@ -1249,10 +1250,10 @@ mod tests {
     #[test]
     fn test_alloc_vec_index_range_mut() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
-        alloc_vec.push_no_grow(4);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        alloc_vec.store_next(3);
+        alloc_vec.store_next(4);
 
         // Mutate values in the range [1, 4)
         for value in &mut alloc_vec[1..3] {
@@ -1271,9 +1272,9 @@ mod tests {
     #[test]
     fn test_alloc_vec_first() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        assert_eq!(alloc_vec.first(), &1);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        assert_eq!(alloc_vec.load_first(), &1);
     }
 
     #[test]
@@ -1281,15 +1282,15 @@ mod tests {
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_first_out_of_bounds() {
         let alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        let _ = alloc_vec.first();
+        let _ = alloc_vec.load_first();
     }
 
     #[test]
     fn test_alloc_vec_last() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        assert_eq!(alloc_vec.last(), &2);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        assert_eq!(alloc_vec.load_last(), &2);
     }
 
     #[test]
@@ -1297,16 +1298,16 @@ mod tests {
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_last_out_of_bounds() {
         let alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        let _ = alloc_vec.last();
+        let _ = alloc_vec.load_last();
     }
 
     #[test]
     fn test_alloc_vec_pop_front() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
-        assert_eq!(alloc_vec.pop_front(), 1);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        alloc_vec.store_next(3);
+        assert_eq!(alloc_vec.take_first(), 1);
         assert_eq!(alloc_vec.len(), 2);
         assert_eq!(alloc_vec[0], 2);
         assert_eq!(alloc_vec[1], 3);
@@ -1317,14 +1318,14 @@ mod tests {
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_pop_front_out_of_bounds() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.pop_front();
+        alloc_vec.take_first();
     }
 
     #[test]
     fn test_alloc_vec_pop() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(42);
-        assert_eq!(alloc_vec.pop(), 42);
+        alloc_vec.store_next(42);
+        assert_eq!(alloc_vec.take_last(), 42);
         assert_eq!(alloc_vec.len(), 0);
     }
 
@@ -1333,15 +1334,15 @@ mod tests {
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_pop_out_of_bounds() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.pop();
+        alloc_vec.take_last();
     }
 
     #[test]
     fn test_alloc_vec_remove() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        assert_eq!(alloc_vec.remove(0), 1);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        assert_eq!(alloc_vec.take(0), 1);
         assert_eq!(alloc_vec.len(), 1);
         assert_eq!(alloc_vec[0], 2);
     }
@@ -1351,7 +1352,7 @@ mod tests {
     #[should_panic(expected = "Index out of bounds")]
     fn test_alloc_vec_remove_out_of_bounds() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        assert_eq!(alloc_vec.remove(0), 1);
+        assert_eq!(alloc_vec.take(0), 1);
     }
 
     #[test]
@@ -1361,8 +1362,8 @@ mod tests {
         assert_eq!(alloc_vec.len(), 0);
 
         // Add 2 elements
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
 
         // Truncate to length less than current length
         alloc_vec.truncate_unchecked(1);
@@ -1379,8 +1380,8 @@ mod tests {
     #[should_panic(expected = "New length must be less than the current length")]
     fn test_alloc_vec_truncate_unchecked_error() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
         // This should panic because new length is not less than current length
         alloc_vec.truncate_unchecked(3);
     }
@@ -1388,9 +1389,9 @@ mod tests {
     #[test]
     fn test_alloc_vec_swap() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        alloc_vec.store_next(3);
         alloc_vec.swap(0, 2);
         assert_eq!(alloc_vec[0], 3);
         assert_eq!(alloc_vec[2], 1);
@@ -1399,9 +1400,9 @@ mod tests {
     #[test]
     fn test_alloc_vec_replace() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        alloc_vec.store_next(3);
         let old_value = alloc_vec.replace(1, 10);
         assert_eq!(alloc_vec[1], 10);
         assert_eq!(old_value, 2);
@@ -1410,9 +1411,9 @@ mod tests {
     #[test]
     fn test_alloc_vec_iter() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        alloc_vec.store_next(3);
         let mut iter = alloc_vec.iter();
         assert_eq!(iter.next(), Some(&1));
         assert_eq!(iter.next(), Some(&2));
@@ -1423,9 +1424,9 @@ mod tests {
     #[test]
     fn test_alloc_vec_iter_mut() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        alloc_vec.store_next(3);
         for value in alloc_vec.iter_mut() {
             *value *= 2;
         }
@@ -1439,9 +1440,9 @@ mod tests {
     #[test]
     fn test_alloc_vec_for_loop() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        alloc_vec.store_next(3);
         let mut sum = 0;
         // Immutable borrow
         for value in &alloc_vec {
@@ -1453,9 +1454,9 @@ mod tests {
     #[test]
     fn test_alloc_vec_for_loop_mut() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        alloc_vec.store_next(3);
         // Mutable borrow
         for value in &mut alloc_vec {
             *value *= 2;
@@ -1470,9 +1471,9 @@ mod tests {
     #[test]
     fn test_alloc_vec_into_iterator(){
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(3);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        alloc_vec.store_next(3);
         let mut iter: AllocVecIntoIter<u8> = alloc_vec.into_iter();
         assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.next(), Some(2));
@@ -1490,9 +1491,9 @@ mod tests {
     #[test]
     fn test_alloc_vec_deref() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        alloc_vec.store_next(3);
         let slice: &[u8] = &*alloc_vec;
         assert_eq!(slice, &[1, 2, 3]);
     }
@@ -1507,9 +1508,9 @@ mod tests {
     #[test]
     fn test_alloc_vec_deref_mut() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        alloc_vec.store_next(3);
         let slice: &mut [u8] = &mut *alloc_vec;
         slice[0] = 10;
         assert_eq!(slice, &[10, 2, 3]);
@@ -1518,10 +1519,10 @@ mod tests {
     #[test]
     fn test_alloc_vec_clear() {
         let mut alloc_vec: AllocVec<u8> = AllocVec::new_allocate(10);
-        alloc_vec.push_no_grow(1);
-        alloc_vec.push_no_grow(2);
-        alloc_vec.push_no_grow(3);
-        alloc_vec.clear();
+        alloc_vec.store_next(1);
+        alloc_vec.store_next(2);
+        alloc_vec.store_next(3);
+        alloc_vec.drop_init();
         assert_eq!(alloc_vec.len(), 0);
     }
 
@@ -1548,9 +1549,9 @@ mod tests {
         let mut alloc_vec: AllocVec<DropCounter> = AllocVec::new_allocate(3);
 
         // Reference 3 elements to the same drop counter.
-        alloc_vec.push_no_grow(DropCounter { count: Rc::clone(&drop_count) });
-        alloc_vec.push_no_grow(DropCounter { count: Rc::clone(&drop_count) });
-        alloc_vec.push_no_grow(DropCounter { count: Rc::clone(&drop_count) });
+        alloc_vec.store_next(DropCounter { count: Rc::clone(&drop_count) });
+        alloc_vec.store_next(DropCounter { count: Rc::clone(&drop_count) });
+        alloc_vec.store_next(DropCounter { count: Rc::clone(&drop_count) });
 
         assert_eq!(alloc_vec.len(), 3);
 
@@ -1585,9 +1586,9 @@ mod tests {
     #[test]
     fn test_alloc_vec_clone() {
         let mut original: AllocVec<u8> = AllocVec::new_allocate(10);
-        original.push_no_grow(1);
-        original.push_no_grow(2);
-        original.push_no_grow(3);
+        original.store_next(1);
+        original.store_next(2);
+        original.store_next(3);
 
         // Clone with the same capacity
         let mut cloned = original.clone();
@@ -1602,7 +1603,7 @@ mod tests {
         }
 
         // Mutating the clone must not affect the original
-        cloned.push_no_grow(4);
+        cloned.store_next(4);
         assert_eq!(cloned.len(), original.len() + 1);
         assert_eq!(original.len(), 3); // original length
     }
@@ -1611,9 +1612,9 @@ mod tests {
     fn test_alloc_vec_clone_compact() {
         let mut original: AllocVec<u8> = AllocVec::new_allocate(10);
 
-        original.push_no_grow(1);
-        original.push_no_grow(2);
-        original.push_no_grow(3);
+        original.store_next(1);
+        original.store_next(2);
+        original.store_next(3);
 
         // Clone without retaining the capacity
         let cloned = original.clone_compact();
@@ -1639,7 +1640,7 @@ mod tests {
         assert_eq!(cloned.capacity(), original.len() + 1);
 
         // Add a new element
-        cloned.push_no_grow(4);
+        cloned.store_next(4);
 
         // Compare the lengths of the clone and the original
         assert_eq!(cloned.len(), original.len() + 1);
@@ -1648,30 +1649,30 @@ mod tests {
     #[test]
     fn test_alloc_vec_equality() {
         let mut vec1: AllocVec<u8> = AllocVec::new_allocate(3);
-        vec1.push_no_grow(1);
-        vec1.push_no_grow(2);
-        vec1.push_no_grow(3);
+        vec1.store_next(1);
+        vec1.store_next(2);
+        vec1.store_next(3);
 
         let mut vec2: AllocVec<u8> = AllocVec::new_allocate(3);
-        vec2.push_no_grow(1);
-        vec2.push_no_grow(2);
-        vec2.push_no_grow(3);
+        vec2.store_next(1);
+        vec2.store_next(2);
+        vec2.store_next(3);
 
         // Vectors with the same elements must be equal
         assert_eq!(vec1, vec2);
 
         let mut vec3: AllocVec<u8> = AllocVec::new_allocate(3);
-        vec3.push_no_grow(4);
-        vec3.push_no_grow(5);
-        vec3.push_no_grow(6);
+        vec3.store_next(4);
+        vec3.store_next(5);
+        vec3.store_next(6);
 
         // Vectors with different elements must not be equal
         assert_ne!(vec1, vec3);
 
         let mut vec4: AllocVec<u8> = AllocVec::new_allocate(4);
-        vec4.push_no_grow(1);
-        vec4.push_no_grow(2);
-        vec4.push_no_grow(3);
+        vec4.store_next(1);
+        vec4.store_next(2);
+        vec4.store_next(3);
 
         // Vectors with the same elements but different capacities must be equal
         assert_eq!(vec1, vec4);
@@ -1680,9 +1681,9 @@ mod tests {
     #[test]
     fn test_alloc_vec_debug() {
         let mut vec: AllocVec<u8> = AllocVec::new_allocate(3);
-        vec.push_no_grow(1);
-        vec.push_no_grow(2);
-        vec.push_no_grow(3);
+        vec.store_next(1);
+        vec.store_next(2);
+        vec.store_next(3);
 
         let debug_output = format!("{:?}", vec);
         let expected_output = "[1, 2, 3]";
