@@ -1,6 +1,6 @@
 use std::alloc::{self, alloc, Layout};
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut, Index, IndexMut, Range};
+use std::ops::{Deref, DerefMut, Range};
 use std::ptr;
 use std::fmt::Debug;
 
@@ -840,77 +840,6 @@ impl<T> Default for BufferPointer<T> {
     }
 }
 
-impl<T> Index<usize> for BufferPointer<T> {
-    type Output = T;
-
-    /// Returns a reference to the element at the specified index.
-    ///
-    /// # Arguments
-    ///
-    /// - `index` - The index of the element to retrieve.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the index is out of bounds.
-    ///
-    fn index(&self, index: usize) -> &Self::Output {
-        // This must be release-mode check because the exposing API is expected to be the same.
-        assert!(index < self.len, "Index out of bounds");
-        unsafe { &*self.ptr.add(index) }
-    }
-}
-
-impl<T> IndexMut<usize> for BufferPointer<T> {
-    /// Returns a mutable reference to the element at the specified index.
-    ///
-    /// # Arguments
-    ///
-    /// - `index` - The index of the element to retrieve.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the index is out of bounds.
-    ///
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        // This must be release-mode check because the exposing API is expected to be the same.
-        assert!(index < self.len, "Index out of bounds");
-        unsafe { &mut *(self.ptr as *mut T).add(index) }
-    }
-}
-
-impl<T> Index<Range<usize>> for BufferPointer<T> {
-    type Output = [T];
-
-    fn index(&self, range: Range<usize>) -> &Self::Output {
-        // These must be release-mode checks because the exposing API is expected to be the same.
-        assert!(
-            range.start <= range.end,
-            "Invalid range: start is greater than end"
-        );
-        assert!(range.end <= self.len, "Range is out of bounds");
-        unsafe {
-            std::slice::from_raw_parts(self.ptr.add(range.start), range.end - range.start)
-        }
-    }
-}
-
-impl<T> IndexMut<Range<usize>> for BufferPointer<T> {
-    fn index_mut(&mut self, range: Range<usize>) -> &mut Self::Output {
-        // This must be release-mode check because the exposing API is expected to be the same.
-        assert!(
-            range.start <= range.end,
-            "Invalid range: start is greater than end"
-        );
-        assert!(range.end <= self.len, "Range out of bounds");
-        unsafe {
-            std::slice::from_raw_parts_mut(
-                (self.ptr as *mut T).add(range.start),
-                range.end - range.start,
-            )
-        }
-    }
-}
-
 impl<'a, T> IntoIterator for &'a BufferPointer<T> {
     type Item = &'a T;
     type IntoIter = std::slice::Iter<'a, T>;
@@ -1270,71 +1199,6 @@ mod tests {
 
         // Not yet allocated, should panic
         buffer_ptr.store_next(1);
-    }
-
-    #[test]
-    fn test_buffer_ptr_index() {
-        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
-        buffer_ptr.store_next(1);
-        buffer_ptr.store_next(2);
-        assert_eq!(buffer_ptr[0], 1);
-        assert_eq!(buffer_ptr[1], 2);
-    }
-
-    #[test]
-    #[cfg(debug_assertions)]
-    #[should_panic(expected = "Index out of bounds")]
-    fn test_buffer_ptr_index_out_of_bounds() {
-        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
-        buffer_ptr.store_next(10);
-
-        // Index out of bounds, should panic
-        let _ = buffer_ptr[1];
-    }
-
-    #[test]
-    fn test_buffer_ptr_index_mut() {
-        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
-        buffer_ptr.store_next(1);
-        buffer_ptr[0] = 2;
-        assert_eq!(buffer_ptr[0], 2);
-    }
-
-    #[test]
-    fn test_buffer_ptr_index_range() {
-        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
-        buffer_ptr.store_next(1);
-        buffer_ptr.store_next(2);
-        buffer_ptr.store_next(3);
-        buffer_ptr.store_next(4);
-
-        // Read values in the range [1, 3)
-        let slice = &buffer_ptr[1..3];
-
-        // Verify the values
-        assert_eq!(slice, &[2, 3]);
-    }
-
-    #[test]
-    fn test_buffer_ptr_index_range_mut() {
-        let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
-        buffer_ptr.store_next(1);
-        buffer_ptr.store_next(2);
-        buffer_ptr.store_next(3);
-        buffer_ptr.store_next(4);
-
-        // Mutate values in the range [1, 4)
-        for value in &mut buffer_ptr[1..3] {
-            *value *= 2;
-        }
-
-        // Verify the changes
-        assert_eq!(buffer_ptr[0], 1);
-        assert_eq!(buffer_ptr[1], 4);
-        assert_eq!(buffer_ptr[2], 6);
-
-        // Verify the rest of the values
-        assert_eq!(buffer_ptr[3], 4);
     }
 
     #[test]
