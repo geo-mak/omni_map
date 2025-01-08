@@ -917,31 +917,33 @@ impl<T: Clone> BufferPointer<T> {
     /// Clones the `BufferPointer` with two possible modes: `compact` or `full`.
     fn clone_in(&self, compact: bool) -> Self {
         // New instance with no allocation.
-        let mut buffer_ptr = Self::new();
+        let mut cloned_buffer = Self::new();
 
         // No allocation required either way.
         if self.count == 0 || (compact && self.len == 0) {
-            return buffer_ptr;
+            return cloned_buffer;
         }
 
         // count here must be greater than 0 either way (self.count or self.len).
         let count = if compact { self.len } else { self.count };
 
         // Allocate memory space.
-        buffer_ptr.allocate(count);
+        cloned_buffer.allocate(count);
 
         // Clone initialized elements.
         unsafe {
-            let src_slice = std::slice::from_raw_parts(self.ptr, self.len);
-            let dest_slice = std::slice::from_raw_parts_mut(buffer_ptr.ptr as *mut T, self.len);
-            dest_slice.clone_from_slice(src_slice);
+            for i in 0..self.len {
+                let src = self.ptr.add(i);
+                let dst = (cloned_buffer.ptr as *mut T).add(i);
+                ptr::write(dst, (*src).clone());
+            }
         }
 
         // Set the new length.
-        buffer_ptr.len = self.len;
+        cloned_buffer.len = self.len;
 
         // Clone is complete.
-        buffer_ptr
+        cloned_buffer
     }
 
     /// Clones the `BufferPointer` with count equal to the length.
@@ -1505,77 +1507,147 @@ mod tests {
     #[test]
     fn test_buffer_ptr_clone_empty() {
         let original: BufferPointer<u8> = BufferPointer::new();
+
+        // Cloning must create a new instance without allocation.
         let cloned = original.clone();
 
-        // Cloned must have the same length and count
+        // Cloned and original must have null pointers.
+        assert_eq!(original.ptr, ptr::null());
+        assert_eq!(cloned.ptr, ptr::null());
+
+        // Original must have a count of 0.
+        assert_eq!(original.len(), 0);
+        assert_eq!(original.count(), 0);
+
+        // Cloned must have the same length and count.
         assert_eq!(cloned.len(), 0);
         assert_eq!(cloned.count(), 0);
-
-        // They must be equal (ptr is dangling in both)
-        assert_eq!(cloned, original);
     }
 
     #[test]
     fn test_buffer_ptr_clone() {
-        let mut original: BufferPointer<u8> = BufferPointer::new_allocate(10);
-        original.store_next(1);
-        original.store_next(2);
-        original.store_next(3);
+        // Box is non-trivial type.
+        let mut original: BufferPointer<Box<u8>> = BufferPointer::new_allocate(5);
+        original.store_next(Box::new(1));
+        original.store_next(Box::new(2));
+        original.store_next(Box::new(3));
 
-        // Clone with the same count
+        // Count is 5.
+        assert_eq!(original.count(), 5);
+
+        // Len is 3.
+        assert_eq!(original.len(), 3);
+
+        // Clone without compacting.
         let mut cloned = original.clone();
 
-        // Cloned must have the same length and count
+        // Cloned must have different pointers.
+        assert_ne!(cloned.ptr, original.ptr);
+
+        // Cloned must have the same length and count.
         assert_eq!(cloned.len(), original.len());
         assert_eq!(cloned.count(), original.count());
 
-        // The elements in the clone must be the same as in the original
+        // The elements in the clone must have the same values as in the original.
         for i in 0..original.len() {
             assert_eq!(cloned.load(i), original.load(i));
         }
 
-        // Mutating the clone must not affect the original
-        cloned.store_next(4);
+        // Allocate more memory for the clone.
+        cloned.reallocate(6);
+
+        // Count of the clone is 1 more than the count of the original.
+        assert_eq!(cloned.count(), original.count() + 1);
+
+        // Add a new element to the clone.
+        cloned.store_next(Box::new(4));
+
+        // Length of the clone is 1 more than the length of the original.
         assert_eq!(cloned.len(), original.len() + 1);
-        assert_eq!(original.len(), 3); // original length
+
+        // Mutating the original must not affect the clone.
+        let first_origin = original.load_mut(0);
+        **first_origin = 10;
+
+        // The original must have the new value.
+        assert_eq!(**original.load(0), 10);
+
+        // The cloned must not be affected.
+        assert_eq!(**cloned.load(0), 1);
+
+        // Mutating the clone must not affect the original.
+        let first_cloned = cloned.load_mut(0);
+        **first_cloned = 11;
+
+        // The original must not be affected.
+        assert_eq!(**original.load(0), 10);
+
+        // The cloned must have the new value.
+        assert_eq!(**cloned.load(0), 11);
     }
 
     #[test]
     fn test_buffer_ptr_clone_compact() {
-        let mut original: BufferPointer<u8> = BufferPointer::new_allocate(10);
+        // Box is non-trivial type.
+        let mut original: BufferPointer<Box<u8>> = BufferPointer::new_allocate(5);
+        original.store_next(Box::new(1));
+        original.store_next(Box::new(2));
+        original.store_next(Box::new(3));
 
-        original.store_next(1);
-        original.store_next(2);
-        original.store_next(3);
+        // Count is 5.
+        assert_eq!(original.count(), 5);
 
-        // Clone without retaining the count
-        let cloned = original.clone_compact();
+        // Len is 3.
+        assert_eq!(original.len(), 3);
 
-        // Cloned must have the same length as the original
+        // Clone with the length as the count.
+        let mut cloned = original.clone_compact();
+
+        // Cloned must have different pointers.
+        assert_ne!(cloned.ptr, original.ptr);
+
+        // Cloned must have the same length.
         assert_eq!(cloned.len(), original.len());
 
-        // Cloned must have a count equal to the length of the original
+        // Cloned must have a count equal to the length of the original.
         assert_eq!(cloned.count(), original.len());
 
-        // The elements in the clone must be the same as in the original
+        // The elements in the clone must have the same values as in the original.
         for i in 0..original.len() {
             assert_eq!(cloned.load(i), original.load(i));
         }
 
-        // Mutating the clone must not affect the original
-        let mut cloned = cloned; // make mutable
+        // Allocate more memory for the clone.
+        cloned.reallocate(6);
 
-        // Increase the count of the clone by 1
-        cloned.reallocate(4);
+        // Count of the clone is 3 more than the length of the original.
+        assert_eq!(cloned.count(), original.len() + 3);
 
-        // Count of the clone must be equal to the length of the original + 1
-        assert_eq!(cloned.count(), original.len() + 1);
+        // Add a new element to the clone.
+        cloned.store_next(Box::new(4));
 
-        // Add a new element
-        cloned.store_next(4);
-
-        // Compare the lengths of the clone and the original
+        // Length of the clone is 1 more than the length of the original.
         assert_eq!(cloned.len(), original.len() + 1);
+
+        // Mutating the original must not affect the clone.
+        let first_origin = original.load_mut(0);
+        **first_origin = 10;
+
+        // The original must have the new value.
+        assert_eq!(**original.load(0), 10);
+
+        // The cloned must not be affected.
+        assert_eq!(**cloned.load(0), 1);
+
+        // Mutating the clone must not affect the original.
+        let first_cloned = cloned.load_mut(0);
+        **first_cloned = 11;
+
+        // The original must not be affected.
+        assert_eq!(**original.load(0), 10);
+
+        // The cloned must have the new value.
+        assert_eq!(**cloned.load(0), 11);
     }
 
     #[test]
