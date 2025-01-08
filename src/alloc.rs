@@ -317,7 +317,6 @@ impl<T> BufferPointer<T> {
 
         // Current layout
         let layout = unsafe {
-            // Already checked in the `allocate_layout` function
             let current_size = self.count.unchecked_mul(t_size);
             Layout::from_size_align_unchecked(current_size, t_align)
         };
