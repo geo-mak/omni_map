@@ -917,36 +917,31 @@ impl<T: Clone> BufferPointer<T> {
     /// Clones the `BufferPointer` with two possible modes: `compact` or `full`.
     fn clone_in(&self, compact: bool) -> Self {
         // New instance with no allocation.
-        let mut new_vec = BufferPointer {
-            ptr: ptr::null(),
-            count: 0,
-            len: 0,
-            _marker: PhantomData,
-        };
+        let mut buffer_ptr = Self::new();
 
-        // No allocation required either way
+        // No allocation required either way.
         if self.count == 0 || (compact && self.len == 0) {
-            return new_vec;
+            return buffer_ptr;
         }
 
-        // count here must be greater than 0 either way (self.count or self.len)
+        // count here must be greater than 0 either way (self.count or self.len).
         let count = if compact { self.len } else { self.count };
 
-        // Allocate memory space
-        new_vec.allocate(count);
+        // Allocate memory space.
+        buffer_ptr.allocate(count);
 
-        // Clone elements
+        // Clone initialized elements.
         unsafe {
             let src_slice = std::slice::from_raw_parts(self.ptr, self.len);
-            let dest_slice = std::slice::from_raw_parts_mut(new_vec.ptr as *mut T, self.len);
+            let dest_slice = std::slice::from_raw_parts_mut(buffer_ptr.ptr as *mut T, self.len);
             dest_slice.clone_from_slice(src_slice);
         }
 
-        // Set the new length
-        new_vec.len = self.len;
+        // Set the new length.
+        buffer_ptr.len = self.len;
 
-        // Clone is complete
-        new_vec
+        // Clone is complete.
+        buffer_ptr
     }
 
     /// Clones the `BufferPointer` with count equal to the length.
@@ -1536,7 +1531,7 @@ mod tests {
 
         // The elements in the clone must be the same as in the original
         for i in 0..original.len() {
-            assert_eq!(cloned[i], original[i]);
+            assert_eq!(cloned.load(i), original.load(i));
         }
 
         // Mutating the clone must not affect the original
@@ -1564,7 +1559,7 @@ mod tests {
 
         // The elements in the clone must be the same as in the original
         for i in 0..original.len() {
-            assert_eq!(cloned[i], original[i]);
+            assert_eq!(cloned.load(i), original.load(i));
         }
 
         // Mutating the clone must not affect the original
