@@ -1077,7 +1077,7 @@ mod tests {
 
         // Values were uninit, so they should be set to `Default`
         for i in 0..10 {
-            assert!(matches!(buffer_ptr[i], Choice::Default))
+            assert!(matches!(buffer_ptr.load(i), Choice::Default))
         }
     }
 
@@ -1093,7 +1093,7 @@ mod tests {
 
         // All elements are must have been initialized to their default values
         for i in 0..count {
-            assert!(matches!(buffer_ptr[i], Choice::Default))
+            assert!(matches!(buffer_ptr.load(i), Choice::Default))
         }
     }
 
@@ -1132,7 +1132,7 @@ mod tests {
 
         // Check values after reallocation
         for i in 0..3 {
-            assert_eq!(buffer_ptr[i], i as u8 + 1);
+            assert_eq!(*buffer_ptr.load(i), i as u8 + 1);
         }
     }
 
@@ -1194,7 +1194,7 @@ mod tests {
         buffer_ptr.store_next(1);
         buffer_ptr.store_next(2);
         *buffer_ptr.load_mut(0) = 10;
-        assert_eq!(buffer_ptr[0], 10);
+        assert_eq!(*buffer_ptr.load(0), 10);
     }
 
     #[test]
@@ -1272,8 +1272,8 @@ mod tests {
         buffer_ptr.store_next(3);
         assert_eq!(buffer_ptr.take_first(), 1);
         assert_eq!(buffer_ptr.len(), 2);
-        assert_eq!(buffer_ptr[0], 2);
-        assert_eq!(buffer_ptr[1], 3);
+        assert_eq!(*buffer_ptr.load(0), 2);
+        assert_eq!(*buffer_ptr.load(1), 3);
     }
 
     #[test]
@@ -1307,7 +1307,7 @@ mod tests {
         buffer_ptr.store_next(2);
         assert_eq!(buffer_ptr.take(0), 1);
         assert_eq!(buffer_ptr.len(), 1);
-        assert_eq!(buffer_ptr[0], 2);
+        assert_eq!(*buffer_ptr.load(0), 2);
     }
 
     #[test]
@@ -1325,8 +1325,8 @@ mod tests {
         buffer_ptr.store_next(2);
         buffer_ptr.store_next(3);
         buffer_ptr.swap(0, 2);
-        assert_eq!(buffer_ptr[0], 3);
-        assert_eq!(buffer_ptr[2], 1);
+        assert_eq!(*buffer_ptr.load(0), 3);
+        assert_eq!(*buffer_ptr.load(2), 1);
     }
 
     #[test]
@@ -1336,7 +1336,7 @@ mod tests {
         buffer_ptr.store_next(2);
         buffer_ptr.store_next(3);
         let old_value = buffer_ptr.replace(1, 10);
-        assert_eq!(buffer_ptr[1], 10);
+        assert_eq!(*buffer_ptr.load(1), 10);
         assert_eq!(old_value, 2);
     }
 
