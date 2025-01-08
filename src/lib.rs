@@ -208,7 +208,7 @@ where
         // EDGE CASE: if capacity is full and all slots are occupied, it will be an infinite loop,
         // but this is prevented by making sure that step is less than capacity.
         while step < capacity {
-            match self.index[slot] {
+            match *self.index.load(slot) {
                 Slot::Empty => {
                     // Slot is empty, key does not exist
                     return (slot, None);
@@ -248,15 +248,16 @@ where
 
         // Build the index of the current entries.
         for (index, entry) in self.entries.iter().enumerate() {
-            let mut slot = entry.hash % capacity;
+            let mut slot_index = entry.hash % capacity;
             loop {
-                match self.index[slot] {
+                let slot = self.index.load_mut(slot_index);
+                match slot {
                     Slot::Empty => {
-                        self.index[slot] = Slot::Occupied(index);
+                        *slot = Slot::Occupied(index);
                         break;
                     },
                     Slot::Occupied(_) => {
-                        slot = (slot + 1) % capacity;
+                        slot_index = (slot_index + 1) % capacity;
                     },
                     Slot::Deleted => {
                         panic!("Logic error: deleted slot found in the index.");
@@ -430,7 +431,9 @@ where
             // A key match is found
             (_, Some(entry_index)) => {
                 // Key exists, update the value
-                let old_value = std::mem::replace(&mut self.entries[entry_index].value, value);
+                let old_value = std::mem::replace(
+                    &mut self.entries.load_mut(entry_index).value, value
+                );
                 Some(old_value)
             }
             // No key match is found, slot is expected to be empty
@@ -440,14 +443,14 @@ where
                 // The capacity-management strategy ensures that the index has empty slots,
                 // otherwise the method will return the last checked slot before the search ends.
                 debug_assert!(
-                    matches!(self.index[slot_index], Slot::Empty),
+                    matches!(self.index.load(slot_index), Slot::Empty),
                     "Logic error: slot is expected to an empty slot."
                 );
 
                 // Insert the new key-value pair
                 self.entries.store_next(Entry::new(key, value, hash));
                 let entry_index = self.entries.len() - 1;
-                self.index[slot_index] = Slot::Occupied(entry_index);
+                *self.index.load_mut(slot_index) = Slot::Occupied(entry_index);
                 None
             },
         }
@@ -663,10 +666,10 @@ where
             if index == self.entries.len() - 1 {
                 // This is safe because the map is not empty
                 entry = self.entries.take_last();
-                self.index[slot] = Slot::Deleted;
+                *self.index.load_mut(slot) = Slot::Deleted;
             } else {
                 entry = self.entries.take(index);
-                self.index[slot] = Slot::Deleted;
+                *self.index.load_mut(slot) = Slot::Deleted;
                 self.decrement_index(index);
             }
 
@@ -751,7 +754,7 @@ where
         }
         let entry = self.entries.load_last();
         if let (slot, Some(_)) = self.find_slot(entry.hash, &entry.key) {
-            self.index[slot] = Slot::Deleted;
+            *self.index.load_mut(slot) = Slot::Deleted;
             // This is safe because the map is not empty
             let entry = self.entries.take_last();
             // Add the deleted slot to the deleted counter
