@@ -196,26 +196,26 @@ where
     ///
     /// # Returns
     ///
-    /// - `(slot, Some(index))`: If the slot is occupied and the keys match.
+    /// - `(slot index, Some(index))`: If the slot is occupied and the keys match.
     ///
-    /// - `(slot, None)`: If the slot is empty or no key match is found.
+    /// - `(slot index, None)`: If the slot is empty or no key match is found.
     ///   The returned slot is the last checked slot before the search ends.
     ///
     fn find_slot(&self, hash: usize, key: &K) -> (usize, Option<usize>) {
         let capacity = self.index.count();
-        let mut slot = hash % capacity;
+        let mut slot_index = hash % capacity;
         let mut step = 0;
         // EDGE CASE: if capacity is full and all slots are occupied, it will be an infinite loop,
         // but this is prevented by making sure that step is less than capacity.
         while step < capacity {
-            match *self.index.load(slot) {
+            match *self.index.load(slot_index) {
                 Slot::Empty => {
                     // Slot is empty, key does not exist
-                    return (slot, None);
+                    return (slot_index, None);
                 },
                 Slot::Occupied(index) => {
                     if self.entries.load(index).key == *key {
-                        return (slot, Some(index));
+                        return (slot_index, Some(index));
                     }
                 },
                 Slot::Deleted => {
@@ -224,10 +224,10 @@ where
                 },
             }
             // Search further until finding a key match or encountering an empty slot
-            slot = (slot + 1) % capacity;
+            slot_index = (slot_index + 1) % capacity;
             step += 1;
         }
-        (slot, None)
+        (slot_index, None)
     }
 
     /// Resets the index of the map with a new capacity.
