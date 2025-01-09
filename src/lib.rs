@@ -651,6 +651,7 @@ where
     /// // Remove a non-existing key
     /// assert_eq!(map.remove(&1), None);
     /// ```
+
     pub fn remove(&mut self, key: &K) -> Option<V> {
         if self.is_empty() {
             return None;
@@ -658,29 +659,40 @@ where
 
         let hash = self.hash(key);
 
-        // Find the slot of the key
-        if let (slot, Some(index)) = self.find_slot(hash, key) {
+        // Find the slot of the key.
+        if let (slot_index, Some(entry_index)) = self.find_slot(hash, key) {
+
+            // Update index.
+            *self.index.load_mut(slot_index) = Slot::Deleted;
+
             let entry: Entry<K, V>;
 
-            // Call remove or pop based on the index
-            if index == self.entries.len() - 1 {
-                // This is safe because the map is not empty
+            if entry_index == self.entries.len() - 1 {
+
+                // Remove the last entry.
                 entry = self.entries.take_last();
-                *self.index.load_mut(slot) = Slot::Deleted;
+
+                // Since the last entry is removed, there is no need to decrement the index.
             } else {
-                entry = self.entries.take(index);
-                *self.index.load_mut(slot) = Slot::Deleted;
-                self.decrement_index(index);
+
+                // Remove the entry.
+                entry = self.entries.take(entry_index);
+
+                // Decrement the index in all slots.
+                self.decrement_index(entry_index);
             }
 
-            // Add the deleted slot to the deleted counter
+            // Increment the deleted counter.
             self.deleted += 1;
 
-            // Return the value of the removed entry
+            // Return the value of the removed entry.
             return Some(entry.value);
         }
+
+        // Key was not found.
         None
     }
+
 
     /// Pops the first entry from the map.
     /// The capacity of the map remains unchanged.
@@ -1617,29 +1629,69 @@ mod tests {
     fn test_map_remove_preserve_order() {
         let mut map = OmniMap::new();
 
-        // Insert 4 items
+        map.insert(1, 2);
+
+        // Remove the only item.
+        assert_eq!(map.remove(&1), Some(2));
+
+        assert_eq!(map.len(), 0);
+        assert_eq!(map.deleted, 1);
+        assert_eq!(*map.index.load(0), Slot::Deleted);
+        assert_eq!(map.capacity(), 1);
+
+        // Must return None, because the map is empty.
+        assert_eq!(map.remove(&1), None);
+
+        // Insert new items.
         map.insert(1, 2);
         map.insert(2, 3);
         map.insert(3, 4);
         map.insert(4, 5);
 
+        // Now, the map must have expanded its capacity and reset the deleted counter.
         assert_eq!(map.len(), 4);
         assert_eq!(map.deleted, 0);
+        assert_eq!(map.capacity(), 4);
 
-        // Remove the second item (key "2")
+        // Remove the second item (key "2").
         assert_eq!(map.remove(&2), Some(3));
 
+        // Map state at this point.
         assert_eq!(map.len(), 3);
         assert_eq!(map.deleted, 1);
         assert_eq!(map.capacity(), 4);
 
-        // Check the order of the remaining items
+        // Index state at this point.
+        let mut deleted = 0;
+        let mut occupied = 0;
+        let mut empty = 0;
+
+        for i in 0..map.index.count() {
+            match map.index.load(i) {
+                Slot::Deleted => {
+                    deleted += 1;
+                },
+                Slot::Occupied(_) => {
+                    occupied += 1;
+                },
+                Slot::Empty => {
+                    empty += 1;
+                }
+            }
+        }
+
+        // Expected index state at this point.
+        assert_eq!(deleted, 1);
+        assert_eq!(occupied, 3);
+        assert_eq!(empty, 0);
+
+        // Check the order of the remaining items.
         assert_eq!(
             map.iter().collect::<Vec<(&u8, &u8)>>(),
             vec![(&1, &2), (&3, &4), (&4, &5)]
         );
 
-        // Order of the keys must be preserved, but index has been updated
+        // Order of the keys must be preserved, but index has been updated.
         assert_eq!(map[0], 2);
         assert_eq!(map[1], 4);
         assert_eq!(map[2], 5);
