@@ -96,8 +96,8 @@ fn debug_assert_not_allocated<T>(instance: &BufferPointer<T>) {
 /// # Internal representation:
 ///
 /// - `ptr` is a raw pointer to the allocated memory space.
-/// - `len` is the number of elements in the pointer.
-/// - `count` is the number of elements the pointer can hold.
+/// - `len` is the number of initialized elements.
+/// - `count` is the number of elements the allocated memory space can hold.
 ///
 /// ```text
 ///        raw ptr  +  len   +  count     --
@@ -947,13 +947,15 @@ impl<T: Clone> BufferPointer<T> {
     }
 
     /// Clones the `BufferPointer` with count equal to the length.
-    #[must_use]
+    #[inline(always)]
     pub(crate) fn clone_compact(&self) -> Self {
         self.clone_in(true)
     }
 }
 
 impl<T: Clone> Clone for BufferPointer<T> {
+
+    #[inline(always)]
     fn clone(&self) -> Self {
         self.clone_in(false)
     }
