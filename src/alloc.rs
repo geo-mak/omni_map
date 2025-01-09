@@ -122,7 +122,10 @@ pub(crate) struct BufferPointer<T> {
 }
 
 impl<T> BufferPointer<T> {
-
+    
+    pub(crate) const T_SIZE: usize = size_of::<T>();
+    pub(crate) const T_ALIGN: usize = align_of::<T>();
+    
     /// Creates a new `BufferPointer` without allocating memory.
     /// The count and length are set to `0`.
     ///
@@ -254,13 +257,13 @@ impl<T> BufferPointer<T> {
 
         // New layout
         let layout = unsafe {
-            let layout_size = count.unchecked_mul(size_of::<T>());
+            let layout_size = count.unchecked_mul(Self::T_SIZE);
 
             // Debug-mode check for the layout size and alignment
             #[cfg(debug_assertions)]
-            debug_layout_size_align(layout_size, align_of::<T>());
+            debug_layout_size_align(layout_size, Self::T_ALIGN);
 
-            Layout::from_size_align_unchecked(layout_size, align_of::<T>())
+            Layout::from_size_align_unchecked(layout_size, Self::T_ALIGN)
         };
 
         // Allocate memory space
@@ -303,22 +306,19 @@ impl<T> BufferPointer<T> {
             "New count must be greater than or equal to the current length."
         );
 
-        let t_size = size_of::<T>(); //  const
-        let t_align = align_of::<T>(); // const
-
         // New size
         let new_size = unsafe {
-            new_count.unchecked_mul(t_size)
+            new_count.unchecked_mul(Self::T_SIZE)
         };
 
         // Debug-mode check for the new layout
         #[cfg(debug_assertions)]
-        debug_layout_size_align(new_size, t_align);
+        debug_layout_size_align(new_size, Self::T_ALIGN);
 
         // Current layout
         let layout = unsafe {
-            let current_size = self.count.unchecked_mul(t_size);
-            Layout::from_size_align_unchecked(current_size, t_align)
+            let current_size = self.count.unchecked_mul(Self::T_SIZE);
+            Layout::from_size_align_unchecked(current_size, Self::T_ALIGN)
         };
 
         // Reallocate memory space
@@ -788,7 +788,7 @@ impl<T> BufferPointer<T> {
         // Size of the metadata (ptr, count and len)
         let metadata_size = size_of::<usize>() * 3;
         // Size of the allocated elements
-        let elements_size = self.count * size_of::<T>();
+        let elements_size = self.count * Self::T_SIZE;
         // Total memory usage
         metadata_size + elements_size
     }
@@ -801,8 +801,8 @@ impl<T> Drop for BufferPointer<T> {
             unsafe {
                 // Current layout
                 let layout = Layout::from_size_align_unchecked(
-                    self.count * size_of::<T>(),
-                    align_of::<T>()
+                    self.count * Self::T_SIZE,
+                    Self::T_ALIGN
                 );
 
                 // Call drop on each element to release their resources.
