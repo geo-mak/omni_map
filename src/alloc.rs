@@ -69,7 +69,7 @@ fn debug_assert_not_allocated<T>(instance: &BufferPointer<T>) {
 /// Contrasted with other pointer types, `BufferPointer` stores the count of the elements it can
 /// refer to (`count`), and the number of the initialized elements (`len`).
 ///
-/// This buffer uses the registered `#[global_allocator]` to allocate memory.
+/// This pointer uses the registered `#[global_allocator]` to allocate memory.
 ///
 /// Using custom allocators will be supported in the future, when the allocator API stabilizes.
 ///
@@ -93,27 +93,6 @@ fn debug_assert_not_allocated<T>(instance: &BufferPointer<T>) {
 ///   For now, all public methods are currently marked as safe, especially that all preconditions
 ///   are checked in `debug builds`.
 ///
-/// # Internal representation:
-///
-/// - `ptr` is a raw pointer to the allocated memory space.
-/// - `len` is the number of initialized elements.
-/// - `count` is the number of elements the allocated memory space can hold.
-///
-/// ```text
-///        raw ptr  +  len   +  count     --
-///        *const T |  usize |  usize     |
-///        +--------+--------+--------+   |
-///        | 0x0123 |      2 |      4 |   |--> Metadata
-///        +--------+--------+--------+   |
-///             |                       --
-///             v                                --
-///        +--------+--------+--------+--------+   |
-///        | val: T | val: T | uninit | uninit |   |--> Heap memory
-///        +--------+--------+--------+--------+   |
-///          0x0123   0x0127   0x012B   0x012F     |    Alignment is illustrative
-///             0       1        2        3      --
-///
-/// ```
 pub(crate) struct BufferPointer<T> {
     ptr: *const T,
     count: usize,
