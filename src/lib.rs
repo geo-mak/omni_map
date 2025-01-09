@@ -771,13 +771,25 @@ where
         if self.is_empty() {
             return None;
         }
-        let entry = self.entries.load_last();
-        if let (slot, Some(_)) = self.find_slot(entry.hash, &entry.key) {
-            *self.index.load_mut(slot) = Slot::Deleted;
-            // This is safe because the map is not empty
+
+        // Load the entry to find its slot.
+        let entry_ref = self.entries.load_last();
+
+        // Find the slot of the key.
+        if let (slot, Some(_)) = self.find_slot(entry_ref.hash, &entry_ref.key) {
+
+            // Remove the last entry.
             let entry = self.entries.take_last();
-            // Add the deleted slot to the deleted counter
+
+            // Update the slot.
+            *self.index.load_mut(slot) = Slot::Deleted;
+
+            // Since the last entry is removed, there is no need to decrement the index.
+
+            // Increment the deleted counter.
             self.deleted += 1;
+
+            // Return the deleted entry.
             return Some((entry.key, entry.value));
         }
         None
@@ -1512,24 +1524,65 @@ mod tests {
     fn test_map_pop() {
         let mut map = OmniMap::new();
 
-        // Insert 3 items
+        // Last item.
+        map.insert(1, 2);
+
+        // Must return the only item in the map.
+        let (key, value) = map.pop().unwrap();
+
+        assert_eq!(key, 1);
+        assert_eq!(value, 2);
+        assert_eq!(map.len(), 0);
+        assert_eq!(map.deleted, 1);
+        assert_eq!(*map.index.load(0), Slot::Deleted);
+        assert_eq!(map.capacity(), 1);
+
+        // Must return None, because the map is empty.
+        assert_eq!(map.pop(), None);
+
+        // Insert new items.
         map.insert(1, 2);
         map.insert(2, 3);
-        map.insert(3, 4); // Last key
+        map.insert(3, 4);
 
+        // Now, the map must expand its capacity reset the deleted counter.
         assert_eq!(map.len(), 3);
         assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 4);
 
-        let removed_item = map.pop();
+        // Pop the last item.
+        assert_eq!(map.pop(), Some((3, 4)));
 
-        assert_eq!(removed_item, Some((3, 4)));
-
+        // Map state at this point.
         assert_eq!(map.len(), 2);
         assert_eq!(map.deleted, 1);
         assert_eq!(map.capacity(), 4);
 
-        // Access by get to the remaining items
+        // Index state at this point.
+        let mut deleted = 0;
+        let mut occupied = 0;
+        let mut empty = 0;
+
+        for i in 0..map.index.count() {
+            match map.index.load(i) {
+                Slot::Deleted => {
+                    deleted += 1;
+                },
+                Slot::Occupied(_) => {
+                    occupied += 1;
+                },
+                Slot::Empty => {
+                    empty += 1;
+                }
+            }
+        }
+
+        // Expected index state at this point.
+        assert_eq!(deleted, 1);
+        assert_eq!(occupied, 2);
+        assert_eq!(empty, 1);
+
+        // Expected values at this point.
         assert_eq!(map.get(&1), Some(&2));
         assert_eq!(map.get(&2), Some(&3));
         assert_eq!(map.get(&3), None);
