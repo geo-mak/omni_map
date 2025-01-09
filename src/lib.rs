@@ -47,7 +47,7 @@ enum Slot {
     Occupied(usize),
 }
 
-// Required to call AllocVec::new_allocate_default()
+// Required to call BufferPointer::memset_default()
 impl Default for Slot {
     #[inline(always)]
     fn default() -> Self {
@@ -713,12 +713,31 @@ where
         if self.is_empty() {
             return None;
         }
-        // This is safe because the map is not empty
-        let entry = self.entries.take_first();
-        self.decrement_index(0);
-        // Add the deleted slot to the deleted counter
-        self.deleted += 1;
-        Some((entry.key, entry.value))
+
+        // Load the first entry to find its slot.
+        let entry_ref = self.entries.load_first();
+
+        // Find the slot of the key.
+        if let (slot, Some(_)) = self.find_slot(entry_ref.hash, &entry_ref.key) {
+
+            // Remove the first entry.
+            let entry = self.entries.take_first();
+
+            // Update the slot.
+            *self.index.load_mut(slot) = Slot::Deleted;
+
+            // Decrement the index.
+            self.decrement_index(0);
+
+            // Increment the deleted counter.
+            self.deleted += 1;
+
+            // Return the deleted entry.
+            return Some((entry.key, entry.value));
+        };
+
+        // This is a logic error, entry must be found in the index.
+        panic!("Logic error: entry not found in the index.");
     }
 
     /// Pops the last entry from the map.
@@ -1425,23 +1444,65 @@ mod tests {
     fn test_map_pop_front() {
         let mut map = OmniMap::new();
 
-        // Insert 3 items
-        map.insert(1, 2); // First key
+        // First item.
+        map.insert(1, 2);
+
+        // Must return the only item in the map.
+        let (key, value) = map.pop_front().unwrap();
+
+        assert_eq!(key, 1);
+        assert_eq!(value, 2);
+        assert_eq!(map.len(), 0);
+        assert_eq!(map.deleted, 1);
+        assert_eq!(*map.index.load(0), Slot::Deleted);
+        assert_eq!(map.capacity(), 1);
+
+        // Must return None, because the map is empty.
+        assert_eq!(map.pop_front(), None);
+
+        // Insert new items.
+        map.insert(1, 2);
         map.insert(2, 3);
         map.insert(3, 4);
 
+        // Now, the map must expand its capacity reset the deleted counter.
         assert_eq!(map.len(), 3);
         assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 4);
 
-        // Pop the first item
+        // Pop the first item.
         assert_eq!(map.pop_front(), Some((1, 2)));
 
+        // Map state at this point.
         assert_eq!(map.len(), 2);
         assert_eq!(map.deleted, 1);
         assert_eq!(map.capacity(), 4);
 
-        // Access by get to the remaining items
+        // Index state at this point.
+        let mut deleted = 0;
+        let mut occupied = 0;
+        let mut empty = 0;
+
+        for i in 0..map.index.count() {
+            match map.index.load(i) {
+                Slot::Deleted => {
+                    deleted += 1;
+                },
+                Slot::Occupied(_) => {
+                    occupied += 1;
+                },
+                Slot::Empty => {
+                    empty += 1;
+                }
+            }
+        }
+
+        // Expected index state at this point.
+        assert_eq!(deleted, 1);
+        assert_eq!(occupied, 2);
+        assert_eq!(empty, 1);
+
+        // Expected values at this point.
         assert_eq!(map.get(&1), None);
         assert_eq!(map.get(&2), Some(&3));
         assert_eq!(map.get(&3), Some(&4));
