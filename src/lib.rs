@@ -726,10 +726,12 @@ where
             return None;
         }
 
-        // Load the first entry to find its slot.
+        // SAFETY: The map is not empty, so an entry must exist.
+        // Out-of-bounds check is performed in debug mode also.
         let entry_ref = self.entries.load_first();
 
         // Find the slot of the key.
+        // Expected pattern: (slot index, Some(entry index)).
         if let (slot, Some(_)) = self.find_slot(entry_ref.hash, &entry_ref.key) {
 
             // Remove the first entry.
@@ -748,8 +750,8 @@ where
             return Some((entry.key, entry.value));
         };
 
-        // This is a logic error, entry must be found in the index.
-        panic!("Logic error: entry not found in the index.");
+        // This must be unreachable, the slot must be found.
+        unreachable!("Logic error: entry exists, but it has no associated slot in the index.");
     }
 
     /// Pops the last entry from the map.
@@ -784,10 +786,12 @@ where
             return None;
         }
 
-        // Load the entry to find its slot.
+        // SAFETY: The map is not empty, so an entry must exist.
+        // Out-of-bounds check is performed in debug mode also.
         let entry_ref = self.entries.load_last();
 
         // Find the slot of the key.
+        // Expected pattern: (slot index, Some(entry index)).
         if let (slot, Some(_)) = self.find_slot(entry_ref.hash, &entry_ref.key) {
 
             // Remove the last entry.
@@ -804,7 +808,9 @@ where
             // Return the deleted entry.
             return Some((entry.key, entry.value));
         }
-        None
+
+        // This must be unreachable, the slot must be found.
+        unreachable!("Logic error: entry exists, but it has no associated slot in the index.");
     }
 
     /// Shrinks the capacity of the `OmniMap` to the specified capacity.
