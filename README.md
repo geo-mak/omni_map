@@ -1,3 +1,4 @@
+ <img src="https://github.com/geo-mak/omni_map/actions/workflows/ci.yml/badge.svg?branch=main" alt="BuildTest"></img>
 ## OmniMap
 
 A key-value data structure that combines the best of both hash maps and vectors.
