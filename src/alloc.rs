@@ -60,6 +60,18 @@ fn debug_assert_not_allocated<T>(instance: &BufferPointer<T>) {
     assert_eq!(instance.count, 0, "Count must be zero.");
 }
 
+/// Debug-mode check to check the allocation state.
+/// This function is only available in debug builds.
+///
+/// Conditions:
+///
+/// - The count must be greater than `0`.
+///
+#[cfg(debug_assertions)]
+fn debug_assert_alloc_non_zero(count: usize) {
+    assert_ne!(count, 0, "Allocation count must be greater than 0");
+}
+
 /// `BufferPointer` represents an indirect reference to _one or more_ values of type `T`
 /// consecutively in memory.
 ///
@@ -231,8 +243,9 @@ impl<T> BufferPointer<T> {
         #[cfg(debug_assertions)]
         debug_assert_not_allocated(self);
 
-        // Not allowed to allocate zero count
-        debug_assert_ne!(count, 0, "Requested count must be greater than 0");
+        // Allocating zero count is not allowed.
+        #[cfg(debug_assertions)]
+        debug_assert_alloc_non_zero(count);
 
         // New layout
         let layout = unsafe {
@@ -279,6 +292,10 @@ impl<T> BufferPointer<T> {
         #[cfg(debug_assertions)]
         debug_assert_allocated(self);
 
+        // Allocating zero count is not allowed
+        #[cfg(debug_assertions)]
+        debug_assert_alloc_non_zero(new_count);
+
         // Reallocating count less than the current length is not allowed.
         debug_assert!(
             new_count >= self.len,
@@ -314,6 +331,43 @@ impl<T> BufferPointer<T> {
         // Update the pointer and count
         self.ptr = new_ptr;
         self.count = new_count;
+    }
+
+    /// Deallocates the memory space pointed by the `BufferPointer`.
+    ///
+    /// This method doesn't call `drop` on the initialized elements.
+    ///
+    /// The pointer is set to `null` and count and len are set to `0` after deallocation.
+    ///
+    /// # Safety
+    ///
+    /// - Pointer must be allocated before calling this method.
+    ///   Calling this method with a null pointer will cause termination with `SIGABRT`.
+    ///
+    /// - It doesn't call `drop` on the initialized elements.
+    ///   If the elements are not of trivial type, or not dropped properly, this might cause
+    ///   memory leaks.
+    ///
+    pub(crate) fn deallocate_no_drop(&mut self) {
+        // Pointer must be allocated and the current count must be greater than 0.
+        #[cfg(debug_assertions)]
+        debug_assert_allocated(self);
+
+        unsafe {
+            // Current layout
+            let layout = {
+                let current_size = self.count.unchecked_mul(Self::T_SIZE);
+                Layout::from_size_align_unchecked(current_size, Self::T_ALIGN)
+            };
+
+            // This API is weird, it takes everything and tells nothing!
+            alloc::dealloc(self.ptr as *mut u8, layout);
+        }
+
+        // Update the pointer and count
+        self.ptr = ptr::null();
+        self.count = 0;
+        self.len = 0;
     }
 
     /// Sets all elements in the allocated memory space to the default value of `T`.
@@ -1000,7 +1054,7 @@ mod tests {
 
     #[test]
     #[cfg(debug_assertions)]
-    #[should_panic(expected = "Requested count must be greater than 0")]
+    #[should_panic(expected = "Allocation count must be greater than 0")]
     fn test_buffer_ptr_allocate_zero_count() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new();
 

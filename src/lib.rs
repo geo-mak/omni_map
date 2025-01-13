@@ -192,44 +192,6 @@ where
         hasher.finish() as usize
     }
 
-    /// Finds the slot of the key in the index.
-    ///
-    /// # Returns
-    ///
-    /// - `(slot index, Some(index))`: If the slot is occupied and the keys match.
-    ///
-    /// - `(slot index, None)`: If the slot is empty or no key match is found.
-    ///   The returned slot is the last checked slot before the search ends.
-    ///
-    fn find_slot(&self, hash: usize, key: &K) -> (usize, Option<usize>) {
-        let capacity = self.index.count();
-        let mut slot_index = hash % capacity;
-        let mut step = 0;
-        // EDGE CASE: if capacity is full and all slots are occupied, it will be an infinite loop,
-        // but this is prevented by making sure that step is less than capacity.
-        while step < capacity {
-            match *self.index.load(slot_index) {
-                Slot::Empty => {
-                    // Slot is empty, key does not exist
-                    return (slot_index, None);
-                },
-                Slot::Occupied(index) => {
-                    if self.entries.load(index).key == *key {
-                        return (slot_index, Some(index));
-                    }
-                },
-                Slot::Deleted => {
-                    // Deleted must be treated as occupied, because it might have been occupied
-                    // by a key with the same hash, and the searched key might be in the next slot.
-                },
-            }
-            // Search further until finding a key match or encountering an empty slot
-            slot_index = (slot_index + 1) % capacity;
-            step += 1;
-        }
-        (slot_index, None)
-    }
-
     /// Resets the index of the map with a new capacity.
     #[inline(always)]
     fn reset_index(&mut self, cap: usize) {
@@ -277,6 +239,39 @@ where
                 }
             }
         }
+    }
+
+    /// Reallocates the entries and the index with the new capacity without calling `drop` on the
+    /// out-of-bounds entries.
+    ///
+    /// # Safety
+    ///
+    /// - Index and entries must be allocated before calling this method.
+    ///
+    /// - `new_cap` must be greater than `0` and within the range of `isize::MAX`.
+    ///
+    #[inline]
+    fn reallocate_no_drop(&mut self, new_cap: usize) {
+        // Reallocate the entries with the new capacity.
+        self.entries.reallocate(new_cap);
+        // Reset the index with the new capacity.
+        self.reset_index(self.entries.count());
+        // Rebuild the index with the new capacity.
+        self.build_index();
+    }
+
+
+    /// Deallocates the entries and the index without calling `drop` on the initialized entries.
+    ///
+    /// # Safety
+    ///
+    /// Index and entries must be allocated before calling this method.
+    ///
+    #[inline]
+    fn deallocate_no_drop(&mut self) {
+        self.entries.deallocate_no_drop();
+        self.index.deallocate_no_drop();
+        self.deleted = 0;
     }
 
     /// Grows the capacity of the map with reindexing.
@@ -329,6 +324,44 @@ where
             // Allocate the additional capacity with reindexing
             self.grow_reindex(new_cap);
         }
+    }
+
+    /// Finds the slot of the key in the index.
+    ///
+    /// # Returns
+    ///
+    /// - `(slot index, Some(index))`: If the slot is occupied and the keys match.
+    ///
+    /// - `(slot index, None)`: If the slot is empty or no key match is found.
+    ///   The returned slot is the last checked slot before the search ends.
+    ///
+    fn find_slot(&self, hash: usize, key: &K) -> (usize, Option<usize>) {
+        let capacity = self.index.count();
+        let mut slot_index = hash % capacity;
+        let mut step = 0;
+        // EDGE CASE: if capacity is full and all slots are occupied, it will be an infinite loop,
+        // but this is prevented by making sure that step is less than capacity.
+        while step < capacity {
+            match *self.index.load(slot_index) {
+                Slot::Empty => {
+                    // Slot is empty, key does not exist
+                    return (slot_index, None);
+                },
+                Slot::Occupied(index) => {
+                    if self.entries.load(index).key == *key {
+                        return (slot_index, Some(index));
+                    }
+                },
+                Slot::Deleted => {
+                    // Deleted must be treated as occupied, because it might have been occupied
+                    // by a key with the same hash, and the searched key might be in the next slot.
+                },
+            }
+            // Search further until finding a key match or encountering an empty slot
+            slot_index = (slot_index + 1) % capacity;
+            step += 1;
+        }
+        (slot_index, None)
     }
 
     /// Reserves capacity for `additional` more elements.
@@ -858,15 +891,19 @@ where
     /// ```
     #[inline]
     pub fn shrink_to(&mut self, capacity: usize) {
+        let current_len = self.entries.len();
+        let current_capacity = self.index.count();
+
         // Capacity must be less than the current capacity and greater than or equal to the number
         // of elements.
-        if capacity < self.index.count() && capacity >= self.entries.len() {
-            // NOTE: This call is safe, because its conditions are checked already.
-            self.entries.reallocate(capacity);
-            // Reset the index with the new capacity.
-            self.reset_index(capacity);
-            // Rebuild the index with the new capacity.
-            self.build_index();
+        if capacity >= current_len && capacity < current_capacity {
+            // Zero-count allocation is not allowed.
+            // If the length is zero, deallocate the memory.
+            if current_len > 0 {
+                self.reallocate_no_drop(capacity);
+            } else {
+                self.deallocate_no_drop();
+            }
         }
     }
 
@@ -897,14 +934,17 @@ where
     /// ```
     #[inline]
     pub fn shrink_to_fit(&mut self) {
+        let current_len = self.entries.len();
+
         // Capacity must be greater than the number of elements.
-        if self.index.count() > self.entries.len() {
-            // NOTE: This call is safe, because its condition is checked already.
-            self.entries.reallocate(self.entries.len());
-            // Reset the index with the new capacity.
-            self.reset_index(self.entries.len());
-            // Rebuild the index with the new capacity.
-            self.build_index();
+        if self.index.count() > current_len {
+            // Zero-count allocation is not allowed.
+            // If the length is zero, deallocate the memory.
+            if current_len > 0 {
+                self.reallocate_no_drop(current_len);
+            } else {
+                self.deallocate_no_drop();
+            }
         }
     }
 
@@ -1824,6 +1864,20 @@ mod tests {
         for i in 0..10 {
             assert_eq!(map.get(&i), Some(&i));
         }
+
+        // Remove all elements
+        map.clear();
+
+        // Length must be 0 and capacity must be 10.
+        assert_eq!(map.capacity(), 10);
+        assert_eq!(map.len(), 0);
+
+        // Shrink the capacity while empty.
+        map.shrink_to_fit();
+
+        assert_eq!(map.len(), 0);
+        assert_eq!(map.deleted, 0);
+        assert_eq!(map.capacity(), 0);
     }
 
     #[test]
@@ -1844,24 +1898,44 @@ mod tests {
         map.shrink_to(5);
 
         assert_eq!(map.len(), 10);
-        assert_eq!(map.capacity(), 16); // Capacity must stay 16
+
+        // Capacity must stay 16
+        assert_eq!(map.capacity(), 16);
 
         // Shrink and reserve greater than the current capacity (no effect)
         map.shrink_to(20);
 
         assert_eq!(map.len(), 10);
-        assert_eq!(map.capacity(), 16); // Capacity must be adjusted to 16
+
+        // Capacity must be adjusted to 16
+        assert_eq!(map.capacity(), 16);
 
         // Shrink and reserve less than the current capacity and greater than the current length
         map.shrink_to(12);
 
         assert_eq!(map.len(), 10);
-        assert_eq!(map.capacity(), 12); // Capacity must be adjusted to 12
+
+        // Capacity must be adjusted to 12
+        assert_eq!(map.capacity(), 12);
 
         // All elements are accessible
         for i in 0..10 {
             assert_eq!(map.get(&i), Some(&i));
         }
+
+        // Remove all elements
+        map.clear();
+
+        // Length must be 0 and capacity must be 12
+        assert_eq!(map.capacity(), 12);
+        assert_eq!(map.len(), 0);
+
+        // Shrink the capacity to 0 while empty.
+        map.shrink_to(0);
+
+        assert_eq!(map.len(), 0);
+        assert_eq!(map.deleted, 0);
+        assert_eq!(map.capacity(), 0);
     }
 
     #[test]
