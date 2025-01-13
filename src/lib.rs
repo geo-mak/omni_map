@@ -241,8 +241,9 @@ where
         }
     }
 
-    /// Reallocates the entries and the index with the new capacity without calling `drop` on the
-    /// out-of-bounds entries.
+    /// Shrinks or grows the allocated memory space to the specified `new_cap`.
+    ///
+    /// This method will also reset the index and rebuild it according to the new capacity.
     ///
     /// # Safety
     ///
@@ -250,8 +251,12 @@ where
     ///
     /// - `new_cap` must be greater than `0` and within the range of `isize::MAX`.
     ///
+    /// - `new_cap` must be greater than or equal to the current length.
+    ///
+    /// These conditions are checked in debug mode only.
+    ///
     #[inline]
-    fn reallocate_no_drop(&mut self, new_cap: usize) {
+    fn reallocate_reindex(&mut self, new_cap: usize) {
         // Reallocate the entries with the new capacity.
         self.entries.reallocate(new_cap);
         // Reset the index with the new capacity.
@@ -259,7 +264,6 @@ where
         // Rebuild the index with the new capacity.
         self.build_index();
     }
-
 
     /// Deallocates the entries and the index without calling `drop` on the initialized entries.
     ///
@@ -272,34 +276,6 @@ where
         self.entries.deallocate_no_drop();
         self.index.deallocate_no_drop();
         self.deleted = 0;
-    }
-
-    /// Grows the capacity of the map with reindexing.
-    ///
-    /// # Safety
-    ///
-    /// This method should be called only after prior allocation and after ensuring that the
-    /// `new_cap` is greater than the current capacity.
-    ///
-    /// # Parameters
-    ///
-    /// - `new_cap`: The new capacity of the map.
-    ///
-    fn grow_reindex(&mut self, new_cap: usize) {
-        // This must be ensured by the calling contexts.
-        debug_assert!(
-            new_cap > self.capacity(),
-            "Logic error: new capacity must be larger than the current capacity."
-        );
-
-        // Reallocate the entries with the new capacity.
-        // SAFETY: This call is assumed to be safe if the new capacity is greater than the current
-        // capacity.
-        self.entries.reallocate(new_cap);
-        // Reset the index with the new capacity.
-        self.reset_index(self.entries.count());
-        // Rebuild the index with the new capacity.
-        self.build_index();
     }
 
     /// Resizes map with reindexing if the current load exceeds the load factor.
@@ -321,8 +297,8 @@ where
                 .checked_next_power_of_two()
                 .unwrap_or(usize::MAX);
 
-            // Allocate the additional capacity with reindexing
-            self.grow_reindex(new_cap);
+            // Reallocate the entries and index with the new capacity and reindex the map.
+            self.reallocate_reindex(new_cap);
         }
     }
 
@@ -395,8 +371,11 @@ where
         if additional == 0 {
             return;
         }
+
         let new_cap = self.index.count().checked_add(additional).unwrap_or(usize::MAX);
-        self.grow_reindex(new_cap);
+
+        // Reallocate the entries and index with the new capacity and reindex the map.
+        self.reallocate_reindex(new_cap);
     }
 
     /// This method will grow the capacity of the map if the current load exceeds the load factor.
@@ -900,7 +879,7 @@ where
             // Zero-count allocation is not allowed.
             // If the length is zero, deallocate the memory.
             if current_len > 0 {
-                self.reallocate_no_drop(capacity);
+                self.reallocate_reindex(capacity);
             } else {
                 self.deallocate_no_drop();
             }
@@ -941,7 +920,7 @@ where
             // Zero-count allocation is not allowed.
             // If the length is zero, deallocate the memory.
             if current_len > 0 {
-                self.reallocate_no_drop(current_len);
+                self.reallocate_reindex(current_len);
             } else {
                 self.deallocate_no_drop();
             }
