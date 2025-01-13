@@ -489,10 +489,16 @@ where
     #[must_use = "Unused function call that returns without side effects"]
     #[inline]
     pub fn get(&self, key: &K) -> Option<&V> {
+        if self.is_empty() {
+            return None;
+        }
+
         let hash = self.hash(key);
+
         if let (_, Some(index)) = self.find_slot(hash, key) {
             return Some(&self.entries.load(index).value);
         }
+
         None
     }
 
@@ -533,10 +539,16 @@ where
     #[must_use = "Unused function call that returns without side effects"]
     #[inline]
     pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+        if self.is_empty() {
+            return None;
+        }
+
         let hash = self.hash(key);
+
         if let (_, Some(index)) = self.find_slot(hash, key) {
             return Some(&mut self.entries.load_mut(index).value);
         }
+
         None
     }
 
@@ -1363,6 +1375,13 @@ mod tests {
     }
 
     #[test]
+    fn test_map_access_get_not_allocated() {
+        let map: OmniMap<u8, u8>  = OmniMap::new();
+
+        assert_eq!(map.get(&1), None);
+    }
+
+    #[test]
     fn test_map_insert_update() {
         let mut map = OmniMap::new();
 
@@ -1381,6 +1400,13 @@ mod tests {
 
         // Key 3 must remain the same
         assert_eq!(map.get(&3), Some(&4));
+    }
+
+    #[test]
+    fn test_map_access_get_mut_not_allocated() {
+        let mut map: OmniMap<u8, u8>  = OmniMap::new();
+
+        assert_eq!(map.get_mut(&1), None);
     }
 
     #[test]
