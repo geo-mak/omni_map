@@ -1377,6 +1377,9 @@ mod tests {
     fn test_map_insert_get() {
         let mut map = OmniMap::new();
 
+        // Access when the map is empty must return None.
+        assert_eq!(map.get(&1), None);
+
         // Insert
         assert_eq!(map.insert(1, 2), None);
         assert_eq!(map.insert(2, 3), None);
@@ -1392,13 +1395,6 @@ mod tests {
         assert_eq!(map.get(&1), Some(&2));
         assert_eq!(map.get(&2), Some(&3));
         assert_eq!(map.get(&3), Some(&4));
-    }
-
-    #[test]
-    fn test_map_access_get_not_allocated() {
-        let map: OmniMap<u8, u8>  = OmniMap::new();
-
-        assert_eq!(map.get(&1), None);
     }
 
     #[test]
@@ -1423,15 +1419,11 @@ mod tests {
     }
 
     #[test]
-    fn test_map_access_get_mut_not_allocated() {
-        let mut map: OmniMap<u8, u8>  = OmniMap::new();
-
-        assert_eq!(map.get_mut(&1), None);
-    }
-
-    #[test]
     fn test_map_access_get_mut() {
         let mut map = OmniMap::new();
+
+        // Access when the map is empty must return None.
+        assert_eq!(map.get_mut(&1), None);
 
         map.insert(1, 1);
 
@@ -1498,6 +1490,9 @@ mod tests {
     fn test_map_access_get_first() {
         let mut map = OmniMap::new();
 
+        // Access when the map is empty must return None.
+        assert_eq!(map.first(), None);
+
         map.insert(1, 1);
         map.insert(2, 2);
         map.insert(3, 3);
@@ -1509,6 +1504,9 @@ mod tests {
     fn test_map_access_get_last() {
         let mut map = OmniMap::new();
 
+        // Access when the map is empty must return None.
+        assert_eq!(map.last(), None);
+
         map.insert(1, 1);
         map.insert(2, 2);
         map.insert(3, 3);
@@ -1519,6 +1517,9 @@ mod tests {
     #[test]
     fn test_map_pop_front() {
         let mut map = OmniMap::new();
+
+        // Pop when the map is empty must return None.
+        assert_eq!(map.pop_front(), None);
 
         // First item.
         map.insert(1, 2);
@@ -1588,6 +1589,9 @@ mod tests {
     fn test_map_pop() {
         let mut map = OmniMap::new();
 
+        // Pop when the map is empty must return None.
+        assert_eq!(map.pop(), None);
+
         // Last item.
         map.insert(1, 2);
 
@@ -1655,6 +1659,9 @@ mod tests {
     #[test]
     fn test_map_remove_existing_key() {
         let mut map = OmniMap::new();
+
+        // Remove when the map is empty must return None.
+        assert_eq!(map.remove(&1), None);
 
         // Insert 4 items
         map.insert(1, 2);
@@ -1852,6 +1859,7 @@ mod tests {
         assert_eq!(map.len(), 0);
 
         // Shrink the capacity while empty.
+        // This should cause deallocation of the internal buffers.
         map.shrink_to_fit();
 
         assert_eq!(map.len(), 0);
@@ -1910,6 +1918,7 @@ mod tests {
         assert_eq!(map.len(), 0);
 
         // Shrink the capacity to 0 while empty.
+        // This should cause deallocation of the internal buffers.
         map.shrink_to(0);
 
         assert_eq!(map.len(), 0);
