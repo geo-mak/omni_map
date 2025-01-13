@@ -37,8 +37,6 @@ fn debug_layout_size_align(size: usize, align: usize) {
 ///
 #[cfg(debug_assertions)]
 fn debug_assert_allocated<T>(instance: &BufferPointer<T>) {
-    // Note: ptr.is_null() and ptr::null() are unstable as const functions,
-    // so this fn can't be made const yet, and we can't use it in const functions.
     assert!(!instance.ptr.is_null(), "Pointer must not be null.");
     assert_ne!(instance.count, 0, "Count must not be zero.");
 }
@@ -54,8 +52,6 @@ fn debug_assert_allocated<T>(instance: &BufferPointer<T>) {
 ///
 #[cfg(debug_assertions)]
 fn debug_assert_not_allocated<T>(instance: &BufferPointer<T>) {
-    // Note: ptr.is_null() and ptr::null() are unstable as const functions,
-    // so this fn can't be made const yet, and we can't use it in const functions.
     assert!(instance.ptr.is_null(), "Pointer must be null.");
     assert_eq!(instance.count, 0, "Count must be zero.");
 }
@@ -205,13 +201,13 @@ impl<T> BufferPointer<T> {
     }
 
     /// Returns the allocated count of the `BufferPointer`.
-    #[inline]
+    #[inline(always)]
     pub(crate) const fn count(&self) -> usize {
         self.count
     }
 
     /// Returns the number of **initialized** elements of the `BufferPointer`.
-    #[inline]
+    #[inline(always)]
     pub(crate) const fn len(&self) -> usize {
         self.len
     }
