@@ -965,8 +965,15 @@ where
         if self.is_empty() {
             return;
         }
+
+        // Drop initialized entries.
         self.entries.drop_init();
-        self.reset_index(self.index.count());
+
+        // Reset all slots in the index to empty.
+        self.index.memset_default();
+
+        // Reset the deleted counter.
+        self.deleted = 0;
     }
 
     /// Returns an iterator over the key-value pairs in the `OmniMap`.
@@ -1813,10 +1820,14 @@ mod tests {
         assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 4);
 
-        // Insert again
-        map.insert(1, 1);
+        // All slots must be empty in the index
+        for i in 0..map.index.count() {
+            assert_eq!(*map.index.load(i), Slot::Empty);
+        }
 
-        assert_eq!(map.len(), 1);
+        // Reinserting items must work
+        map.insert(1, 2);
+        assert_eq!(map.get(&1), Some(&2));
     }
 
     #[test]
