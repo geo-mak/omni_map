@@ -561,31 +561,35 @@ impl<T> BufferPointer<T> {
         unsafe { &*self.ptr.add(self.len - 1) }
     }
 
-    /// Removes and returns the initialized element at the specified index.
+    /// Removes and returns the initialized element at the specified offset `at`, and shifts the
+    /// elements after `at` to fill the gap.
+    ///
+    /// Indexing is zero-based, i.e., the last element is at offset `len - 1`, this will make
+    /// the shifting range `[at, len - 1]`.
     ///
     /// # Arguments
     ///
-    /// - `index` - The index of the element to remove.
+    /// - `at` - The index of the element to remove.
     ///
     /// # Safety
     ///
     /// This method checks for out of bounds access in debug mode only.
     ///
-    /// The caller must ensure that `index` is within the bounds of the initialized elements.
+    /// The caller must ensure that `at` is within the bounds of the initialized elements.
     ///
     /// # Time Complexity
     ///
     /// _O_(n) where n is the length of the `BufferPointer` minus the index.
     ///
-    pub(crate) const fn take(&mut self, index: usize) -> T {
+    pub(crate) const fn take_shift_left(&mut self, at: usize) -> T {
         // Len > index, so the pointer is not null.
-        debug_assert!(index < self.len, "Index out of bounds");
+        debug_assert!(at < self.len, "Index out of bounds");
         unsafe {
             // infallible
             let value;
             {
                 // The source offset
-                let src = (self.ptr as *mut T).add(index);
+                let src = (self.ptr as *mut T).add(at);
 
                 // The destination offset
                 let dst = src.add(1);
@@ -594,7 +598,7 @@ impl<T> BufferPointer<T> {
                 value = ptr::read(src);
 
                 // Shift everything down to fill in.
-                ptr::copy(dst, src, self.len - index - 1);
+                ptr::copy(dst, src, self.len - at - 1);
             }
 
             // Update len
@@ -620,7 +624,7 @@ impl<T> BufferPointer<T> {
     #[inline(always)]
     pub(crate) const fn take_first(&mut self) -> T {
         // Debug-mode checked for out-of-bounds access.
-        self.take(0)
+        self.take_shift_left(0)
     }
 
     /// Removes the last initialized element and returns it.
@@ -1342,7 +1346,7 @@ mod tests {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
         buffer_ptr.store_next(1);
         buffer_ptr.store_next(2);
-        assert_eq!(buffer_ptr.take(0), 1);
+        assert_eq!(buffer_ptr.take_shift_left(0), 1);
         assert_eq!(buffer_ptr.len(), 1);
         assert_eq!(*buffer_ptr.load(0), 2);
     }
@@ -1352,7 +1356,7 @@ mod tests {
     #[should_panic(expected = "Index out of bounds")]
     fn test_buffer_ptr_take_out_of_bounds() {
         let mut buffer_ptr: BufferPointer<u8> = BufferPointer::new_allocate(10);
-        assert_eq!(buffer_ptr.take(0), 1);
+        assert_eq!(buffer_ptr.take_shift_left(0), 1);
     }
 
     #[test]

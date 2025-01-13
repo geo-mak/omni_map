@@ -701,7 +701,7 @@ where
             } else {
 
                 // Remove the entry.
-                entry = self.entries.take(entry_index);
+                entry = self.entries.take_shift_left(entry_index);
 
                 // Decrement the index in all slots.
                 self.decrement_index(entry_index);
