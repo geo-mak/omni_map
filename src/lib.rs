@@ -1352,7 +1352,6 @@ mod tests {
     fn test_map_new_with_capacity() {
         let map: OmniMap<u8, &str> = OmniMap::with_capacity(10);
 
-        assert!(map.is_empty());
         assert_eq!(map.len(), 0);
         assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 10);
@@ -1385,7 +1384,6 @@ mod tests {
     fn test_map_new_default() {
         let map: OmniMap<u8, &str> = OmniMap::default();
 
-        assert!(map.is_empty());
         assert_eq!(map.len(), 0);
         assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 16);
@@ -1404,7 +1402,6 @@ mod tests {
         assert_eq!(map.insert(3, 4), None);
 
         // Map state
-        assert!(!map.is_empty());
         assert_eq!(map.len(), 3);
         assert_eq!(map.deleted, 0);
         assert_eq!(map.capacity(), 4);

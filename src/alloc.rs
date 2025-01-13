@@ -212,10 +212,10 @@ impl<T> BufferPointer<T> {
         self.len
     }
 
-    /// Returns `true` if the `BufferPointer` has no initialized elements.
-    #[inline]
-    pub(crate) const fn is_uninit(&self) -> bool {
-        self.len == 0
+    /// Returns `true` if the pointer is null.
+    #[inline(always)]
+    pub(crate) fn is_null(&self) -> bool {
+        self.ptr.is_null()
     }
 
     /// Allocates memory space for the `BufferPointer`.
