@@ -362,7 +362,8 @@ where
         if additional == 0 {
             return;
         }
-        self.grow_reindex(self.index.count() + additional);
+        let new_cap = self.index.count().checked_add(additional).unwrap_or(usize::MAX);
+        self.grow_reindex(new_cap);
     }
 
     /// This method will grow the capacity of the map if the current load exceeds the load factor.
