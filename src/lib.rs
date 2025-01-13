@@ -195,6 +195,8 @@ where
     /// Resets the index of the map with a new capacity.
     #[inline(always)]
     fn reset_index(&mut self, cap: usize) {
+        // `BufferPointer` takes care of deallocating its memory when dropped as part of the
+        // reassignment operation.
         self.index = BufferPointer::new_allocate_default(cap);
         self.deleted = 0;
     }
@@ -204,13 +206,11 @@ where
     fn build_index(&mut self) {
         let capacity = self.index.count();
 
-        // NOTE: This must be ensured by the calling contexts, because calling this method is only
-        // needed after shrinking or growing the capacity of the index.
-        debug_assert_eq!(capacity, self.entries.count());
-
         // Build the index of the current entries.
         for (index, entry) in self.entries.iter().enumerate() {
             let mut slot_index = entry.hash % capacity;
+
+            // Find the next empty slot and set it to occupied.
             loop {
                 let slot = self.index.load_mut(slot_index);
                 match slot {
@@ -222,9 +222,8 @@ where
                         slot_index = (slot_index + 1) % capacity;
                     },
                     Slot::Deleted => {
-                        panic!("Logic error: deleted slot found in the index.");
+                        unreachable!("Logic error: deleted slot found in the index.");
                     },
-
                 }
             }
         }
@@ -260,7 +259,7 @@ where
         // Reallocate the entries with the new capacity.
         self.entries.reallocate(new_cap);
         // Reset the index with the new capacity.
-        self.reset_index(self.entries.count());
+        self.reset_index(new_cap);
         // Rebuild the index with the new capacity.
         self.build_index();
     }
@@ -284,15 +283,12 @@ where
 
         let load_factor = (self.entries.len() + self.deleted) as f64 / current_cap as f64;
 
-        // If the current load exceeds the load factor, grow the capacity.
         if load_factor > Self::LOAD_FACTOR {
             let growth_factor = (current_cap as f64 / Self::LOAD_FACTOR).ceil() as usize;
 
             // New capacity must be within the range of `usize` and less than or equal to
-            // `isize::MAX` when rounded up to the nearest multiple of `align` to ensure successful
-            // allocation.
-            // Error-handling is not needed because there is no way to communicate these errors to
-            // the caller without making insert, reserve, etc. return a Result.
+            // `isize::MAX`, but error handling is not implemented, because there is no way to
+            // deal with such error without making insert, reserve, etc. return a Result.
             let new_cap = growth_factor
                 .checked_next_power_of_two()
                 .unwrap_or(usize::MAX);
@@ -315,6 +311,7 @@ where
         let capacity = self.index.count();
         let mut slot_index = hash % capacity;
         let mut step = 0;
+
         // EDGE CASE: if capacity is full and all slots are occupied, it will be an infinite loop,
         // but this is prevented by making sure that step is less than capacity.
         while step < capacity {
@@ -337,6 +334,8 @@ where
             slot_index = (slot_index + 1) % capacity;
             step += 1;
         }
+
+        // This would the case only if the index is full and the key does not exist.
         (slot_index, None)
     }
 
@@ -441,29 +440,35 @@ where
 
         // This is safe because empty slots are guaranteed to exist.
         match self.find_slot(hash, &key) {
-            // A key match is found
+
+            // A key match is found.
             (_, Some(entry_index)) => {
-                // Key exists, update the value
+
+                // Key exists, update the value.
                 let old_value = std::mem::replace(
                     &mut self.entries.load_mut(entry_index).value, value
                 );
+
+                // Return the old value.
                 Some(old_value)
             }
-            // No key match is found, slot is expected to be empty
+
+            // No key match is found, slot is expected to be empty.
             (slot_index, None) => {
-                // SAFETY: The returned slot in this case is a mismatched slot that can't be safely
-                // replaced with an occupied slot without extra checking.
-                // The capacity-management strategy ensures that the index has empty slots,
-                // otherwise the method will return the last checked slot before the search ends.
+
+                // The capacity-management strategy must ensure that the index has empty slots.
                 debug_assert!(
                     matches!(self.index.load(slot_index), Slot::Empty),
                     "Logic error: slot is expected to an empty slot."
                 );
 
-                // Insert the new key-value pair
+                // Update the index.
+                *self.index.load_mut(slot_index) = Slot::Occupied(self.entries.len());
+
+                // Insert the new key-value pair.
                 self.entries.store_next(Entry::new(key, value, hash));
-                let entry_index = self.entries.len() - 1;
-                *self.index.load_mut(slot_index) = Slot::Occupied(entry_index);
+
+                // Key was new and inserted.
                 None
             },
         }
@@ -509,9 +514,13 @@ where
         let hash = self.hash(key);
 
         if let (_, Some(index)) = self.find_slot(hash, key) {
-            return Some(&self.entries.load(index).value);
+            // Get the value of the entry.
+            let value = &self.entries.load(index).value;
+            // Return the value.
+            return Some(value);
         }
 
+        // Key was not found.
         None
     }
 
@@ -559,9 +568,13 @@ where
         let hash = self.hash(key);
 
         if let (_, Some(index)) = self.find_slot(hash, key) {
-            return Some(&mut self.entries.load_mut(index).value);
+            // Get the mutable reference to the value of the entry.
+            let value = &mut self.entries.load_mut(index).value;
+            // Return the mutable reference to the value.
+            return Some(value);
         }
 
+        // Key was not found.
         None
     }
 
@@ -595,8 +608,11 @@ where
         if self.is_empty() {
             return None;
         }
+
         // This is safe because the map is not empty
         let entry = self.entries.load_first();
+
+        // Return the first entry.
         Some((&entry.key, &entry.value))
     }
 
@@ -630,8 +646,11 @@ where
         if self.is_empty() {
             return None;
         }
+
         // This is safe because the map is not empty
         let entry = self.entries.load_last();
+
+        // Return the last entry.
         Some((&entry.key, &entry.value))
     }
 
@@ -690,22 +709,17 @@ where
             // Update index.
             *self.index.load_mut(slot_index) = Slot::Deleted;
 
-            let entry: Entry<K, V>;
-
-            if entry_index == self.entries.len() - 1 {
-
-                // Remove the last entry.
-                entry = self.entries.take_last();
-
+            let entry = if entry_index == self.entries.len() - 1 {
                 // Since the last entry is removed, there is no need to decrement the index.
+                // Remove and return the last entry.
+                self.entries.take_last()
             } else {
-
-                // Remove the entry.
-                entry = self.entries.take_shift_left(entry_index);
-
                 // Decrement the index in all slots.
                 self.decrement_index(entry_index);
-            }
+
+                // Remove and return the last entry.
+                self.entries.take_shift_left(entry_index)
+            };
 
             // Increment the deleted counter.
             self.deleted += 1;
@@ -717,7 +731,6 @@ where
         // Key was not found.
         None
     }
-
 
     /// Pops the first entry from the map.
     /// The capacity of the map remains unchanged.
@@ -752,7 +765,6 @@ where
         }
 
         // SAFETY: The map is not empty, so an entry must exist.
-        // Out-of-bounds check is performed in debug mode also.
         let entry_ref = self.entries.load_first();
 
         // Find the slot of the key.
@@ -812,7 +824,6 @@ where
         }
 
         // SAFETY: The map is not empty, so an entry must exist.
-        // Out-of-bounds check is performed in debug mode also.
         let entry_ref = self.entries.load_last();
 
         // Find the slot of the key.
@@ -1117,6 +1128,7 @@ impl<K, V> Index<usize> for OmniMap<K, V> {
 }
 
 impl<K, V> IndexMut<usize> for OmniMap<K, V> {
+
     /// Returns mutable reference to the value at the specified index.
     ///
     /// # Parameters
@@ -1282,8 +1294,7 @@ where
         let mut clone = OmniMap {
             // Clone the entries with compact capacity
             entries: self.entries.clone_compact(),
-            // NOTE: Index can't be compacted because it's length is equal to the capacity,
-            // so we allocate a new index with capacity equal to the number of elements.
+            // NOTE: Index can't be compacted because it's length is equal to the capacity.
             index: BufferPointer::new_allocate_default(self.entries.len()),
             deleted: 0,
         };
